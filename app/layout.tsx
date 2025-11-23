@@ -6,8 +6,8 @@ import AuthProvider from './components/auth-provider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'MatchMe - No es solo una app, es tu nueva historia',
-  description: 'Conecta con personas afines basado en compatibilidad real',
+  title: 'MatchMe - Encuentra conexiones significativas',
+  description: 'Conecta con personas afines basado en compatibilidad real de personalidad, valores e intereses',
 }
 
 export default function RootLayout({
@@ -19,7 +19,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={inter.className}>
         <AuthProvider>
-          <main className="min-h-screen">
+          <main className="min-h-screen bg-gray-50">
             {children}
           </main>
         </AuthProvider>

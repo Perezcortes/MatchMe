@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { generateSelfKnowledgeReport } from '@/lib/gemini-ai'
+import Icon from '../../components/Icon'
 
 interface UserProfile {
   objective: string
@@ -18,25 +19,26 @@ interface UserProfile {
   lifestyle: any
 }
 
+// Lista de intereses actualizada
 const interestsList = [
-  { id: 'actividad_fisica', name: 'Actividad física', icon: '💪' },
-  { id: 'musica', name: 'Música', icon: '🎵' },
-  { id: 'arte', name: 'Arte', icon: '🎨' },
-  { id: 'viajes', name: 'Viajes', icon: '✈️' },
-  { id: 'cine_series', name: 'Cine y series', icon: '🎬' },
-  { id: 'lectura', name: 'Lectura', icon: '📚' },
-  { id: 'videojuegos', name: 'Videojuegos', icon: '🎮' },
-  { id: 'naturaleza', name: 'Naturaleza', icon: '🌿' },
-  { id: 'gastronomia', name: 'Gastronomía', icon: '🍳' },
-  { id: 'tecnologia', name: 'Tecnología', icon: '💻' },
-  { id: 'emprendimiento', name: 'Emprendimiento', icon: '🚀' },
-  { id: 'mascotas', name: 'Mascotas', icon: '🐾' }
-]
+  { id: 'actividad_fisica', name: 'Actividad física' },
+  { id: 'musica', name: 'Música' },
+  { id: 'arte', name: 'Arte' },
+  { id: 'viajes', name: 'Viajes' },
+  { id: 'cine_series', name: 'Cine y series' },
+  { id: 'lectura', name: 'Lectura' },
+  { id: 'videojuegos', name: 'Videojuegos' },
+  { id: 'naturaleza', name: 'Naturaleza' },
+  { id: 'gastronomia', name: 'Gastronomía' },
+  { id: 'tecnologia', name: 'Tecnología' },
+  { id: 'emprendimiento', name: 'Emprendimiento' },
+  { id: 'mascotas', name: 'Mascotas' }
+] as const
 
 const objectiveMap = {
-  amistad: { name: 'Amistad', icon: '👥', color: 'blue' },
-  networking: { name: 'Networking', icon: '💼', color: 'green' },
-  relacion: { name: 'Relación', icon: '💝', color: 'pink' }
+  amistad: { name: 'Amistad', color: 'text-blue-600 bg-blue-100' },
+  networking: { name: 'Networking', color: 'text-green-600 bg-green-100' },
+  relacion: { name: 'Relación', color: 'text-pink-600 bg-pink-100' }
 }
 
 export default function ReportPage() {
@@ -136,11 +138,15 @@ export default function ReportPage() {
         {/* Objetivo Principal */}
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Tu Objetivo Principal</h2>
-              <div className="flex items-center space-x-3">
-                <span className="text-2xl">{objectiveInfo.icon}</span>
-                <span className="text-xl font-bold text-gray-800">{objectiveInfo.name}</span>
+            <div className="flex items-center space-x-4">
+              <div className="bg-blue-100 rounded-xl p-3">
+                <Icon name={userProfile.objective as any} size={32} className="text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Tu Objetivo Principal</h2>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xl font-bold text-gray-800">{objectiveInfo.name}</span>
+                </div>
               </div>
             </div>
             <div className="text-right">
@@ -156,16 +162,27 @@ export default function ReportPage() {
         <div className="grid md:grid-cols-2 gap-8 mb-8">
           {/* Personalidad */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Tu Personalidad</h3>
+            <div className="flex items-center space-x-3 mb-4">
+              <Icon name="actividad_fisica" size={24} className="text-purple-600" />
+              <h3 className="text-xl font-bold text-gray-900">Tu Personalidad</h3>
+            </div>
             <div className="space-y-3">
               {userProfile.personality && Object.entries(userProfile.personality).map(([trait, score]) => (
                 <div key={trait} className="flex justify-between items-center">
                   <span className="text-gray-700 capitalize">
                     {trait.replace('_', ' ')}:
                   </span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTraitColor(score)}`}>
-                    {getTraitLevel(score)} ({score}/5)
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-16 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-purple-500 h-2 rounded-full"
+                        style={{ width: `${(score as number) * 20}%` }}
+                      ></div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTraitColor(score)} w-20 text-center`}>
+                      {getTraitLevel(score)} ({score}/5)
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -173,14 +190,17 @@ export default function ReportPage() {
 
           {/* Intereses */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Tus Intereses Principales</h3>
+            <div className="flex items-center space-x-3 mb-4">
+              <Icon name="musica" size={24} className="text-green-600" />
+              <h3 className="text-xl font-bold text-gray-900">Tus Intereses Principales</h3>
+            </div>
             <div className="space-y-3">
               {userProfile.interests?.map(interestId => {
                 const interest = getInterestByName(interestId)
                 return (
-                  <div key={interestId} className="flex items-center space-x-3">
-                    <span className="text-2xl">{interest?.icon}</span>
-                    <span className="text-gray-700">{interest?.name}</span>
+                  <div key={interestId} className="flex items-center space-x-3 bg-gray-50 rounded-lg p-3">
+                    <Icon name={interestId as any} size={20} />
+                    <span className="text-gray-700 font-medium">{interest?.name}</span>
                   </div>
                 )
               })}
@@ -191,16 +211,14 @@ export default function ReportPage() {
         {/* Reporte de IA */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="bg-purple-100 rounded-lg p-3">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
+            <div className="bg-purple-100 rounded-xl p-3">
+              <Icon name="emprendimiento" size={24} className="text-purple-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-900">Análisis de Compatibilidad</h3>
           </div>
           
           <div className="prose prose-lg max-w-none">
-            <div className="text-gray-700 leading-relaxed whitespace-pre-line">
+            <div className="text-gray-700 leading-relaxed whitespace-pre-line bg-blue-50 rounded-xl p-6 border border-blue-100">
               {aiReport || 'Generando análisis personalizado...'}
             </div>
           </div>
@@ -210,8 +228,9 @@ export default function ReportPage() {
         <div className="text-center">
           <button
             onClick={handleContinueToMatches}
-            className="px-8 py-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors text-lg shadow-lg"
+            className="px-8 py-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-all duration-300 transform hover:scale-105 text-lg shadow-lg flex items-center justify-center mx-auto"
           >
+            <Icon name="amistad" size={20} className="mr-2" />
             Ver Mis Matches Compatibles
           </button>
           

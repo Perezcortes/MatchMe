@@ -2,78 +2,67 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Icon from '@/app/components/Icon'
 
 const interestsList = [
   {
     id: 'actividad_fisica',
     name: 'Actividad física',
-    icon: '💪',
     category: 'Salud'
   },
   {
     id: 'musica',
     name: 'Música',
-    icon: '🎵',
     category: 'Arte'
   },
   {
     id: 'arte',
     name: 'Arte',
-    icon: '🎨',
     category: 'Arte'
   },
   {
     id: 'viajes',
     name: 'Viajes',
-    icon: '✈️',
     category: 'Aventura'
   },
   {
     id: 'cine_series',
     name: 'Cine y series',
-    icon: '🎬',
     category: 'Entretenimiento'
   },
   {
     id: 'lectura',
     name: 'Lectura',
-    icon: '📚',
     category: 'Cultura'
   },
   {
     id: 'videojuegos',
     name: 'Videojuegos',
-    icon: '🎮',
     category: 'Entretenimiento'
   },
   {
     id: 'naturaleza',
     name: 'Naturaleza',
-    icon: '🌿',
     category: 'Aventura'
   },
   {
     id: 'gastronomia',
     name: 'Gastronomía',
-    icon: '🍳',
     category: 'Cultura'
   },
   {
     id: 'tecnologia',
     name: 'Tecnología',
-    icon: '💻',
     category: 'Ciencia'
   },
   {
     id: 'emprendimiento',
     name: 'Emprendimiento',
-    icon: '🚀',
     category: 'Profesional'
   },
   {
     id: 'mascotas',
     name: 'Mascotas',
-    icon: '🐾',
     category: 'Vida'
   }
 ]
@@ -136,7 +125,7 @@ export default function InterestsPage() {
           <div className="w-full bg-gray-200 rounded-full h-3">
             <div 
               className="bg-purple-600 h-3 rounded-full transition-all duration-300"
-              style={{ width: '60%' }}
+              style={{ width: '50%' }}
             ></div>
           </div>
         </div>
@@ -148,10 +137,11 @@ export default function InterestsPage() {
               ? 'bg-green-100 border border-green-200 text-green-800'
               : 'bg-blue-100 border border-blue-200 text-blue-800'
           }`}>
-            <p className="font-semibold">
+            <p className="font-semibold flex items-center justify-center gap-2">
+              <Icon name="honestidad" size={20} />
               {selectedInterests.length === 3 
-                ? '✅ ¡Perfecto! Has seleccionado 3 intereses'
-                : `📝 Selecciona ${3 - selectedInterests.length} interés(es) más`}
+                ? '¡Perfecto! Has seleccionado 3 intereses'
+                : `Selecciona ${3 - selectedInterests.length} interés(es) más`}
             </p>
           </div>
         </div>
@@ -174,10 +164,10 @@ export default function InterestsPage() {
               }`}
             >
               <div className="text-center space-y-3">
-                <div className={`text-3xl transition-transform duration-300 ${
+                <div className={`transition-transform duration-300 flex justify-center ${
                   selectedInterests.includes(interest.id) ? 'scale-110' : ''
                 }`}>
-                  {interest.icon}
+                  <Icon name={interest.id as any} size={32} />
                 </div>
                 
                 <div>
@@ -220,13 +210,15 @@ export default function InterestsPage() {
                     key={interestId}
                     className="flex items-center space-x-2 bg-purple-100 text-purple-800 px-4 py-2 rounded-full"
                   >
-                    <span>{interest?.icon}</span>
+                    <Icon name={interestId as any} size={16} />
                     <span className="font-medium">{interest?.name}</span>
                     <button
                       onClick={() => toggleInterest(interestId)}
                       className="text-purple-600 hover:text-purple-800 ml-1"
                     >
-                      ×
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
                     </button>
                   </div>
                 )
@@ -239,9 +231,7 @@ export default function InterestsPage() {
         <div className="max-w-2xl mx-auto bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-8">
           <div className="flex items-start space-x-4">
             <div className="bg-blue-100 rounded-lg p-3">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
+              <Icon name="creatividad" size={24} className="text-blue-600" />
             </div>
             <div>
               <h4 className="font-semibold text-blue-900 mb-2">¿Por qué solo 3 intereses?</h4>
@@ -257,17 +247,23 @@ export default function InterestsPage() {
         <div className="max-w-2xl mx-auto flex justify-between items-center">
           <button
             onClick={() => router.push('/test/personality')}
-            className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+            className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center gap-2"
           >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
             Atrás
           </button>
           
           <button
             onClick={handleContinue}
             disabled={selectedInterests.length === 0}
-            className="px-8 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="px-8 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
             Continuar a Valores
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
       </div>

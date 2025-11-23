@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Icon from '@/app/components/Icon'
 
 const objectives = [
   {
@@ -10,7 +11,6 @@ const objectives = [
     title: 'Amistad',
     description: 'Conectar con nuevas personas para amistades genuinas',
     percentage: '50%',
-    icon: '👥',
     color: 'from-blue-500 to-cyan-500'
   },
   {
@@ -18,7 +18,6 @@ const objectives = [
     title: 'Networking Académico/Profesional',
     description: 'Expandir tu red de contactos para colaboraciones y crecimiento',
     percentage: '40%', 
-    icon: '💼',
     color: 'from-green-500 to-emerald-500'
   },
   {
@@ -26,7 +25,6 @@ const objectives = [
     title: 'Relación',
     description: 'Encontrar una conexión romántica significativa',
     percentage: '10%',
-    icon: '💝',
     color: 'from-pink-500 to-rose-500'
   }
 ]
@@ -55,7 +53,7 @@ export default function ObjectivePage() {
         <div className="text-center mb-12">
           <Link href="/" className="inline-block">
             <div className="bg-purple-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-lg">
-              <span className="text-2xl font-bold text-white">MM</span>
+              <Icon name="amistad" size={32} className="text-white" />
             </div>
           </Link>
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
@@ -69,13 +67,13 @@ export default function ObjectivePage() {
         {/* Progress */}
         <div className="max-w-2xl mx-auto mb-12">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Paso 4 de 5</span>
+            <span className="text-sm font-medium text-gray-700">Paso 1 de 4</span>
             <span className="text-sm font-medium text-gray-700">Test de compatibilidad</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3">
             <div 
               className="bg-purple-600 h-3 rounded-full transition-all duration-500"
-              style={{ width: '80%' }}
+              style={{ width: '25%' }}
             ></div>
           </div>
         </div>
@@ -94,8 +92,8 @@ export default function ObjectivePage() {
             >
               {/* Header de la tarjeta */}
               <div className="flex items-center justify-between mb-4">
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-r ${objective.color} flex items-center justify-center text-2xl`}>
-                  {objective.icon}
+                <div className={`w-14 h-14 rounded-xl bg-gradient-to-r ${objective.color} flex items-center justify-center text-white`}>
+                  <Icon name={objective.id as any} size={24} />
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                   selectedObjective === objective.id
@@ -132,9 +130,7 @@ export default function ObjectivePage() {
         <div className="max-w-2xl mx-auto bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-8">
           <div className="flex items-start space-x-4">
             <div className="bg-blue-100 rounded-lg p-3">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Icon name="honestidad" size={24} className="text-blue-600" />
             </div>
             <div>
               <h4 className="font-semibold text-blue-900 mb-2">¿Por qué solo un objetivo?</h4>
@@ -148,18 +144,24 @@ export default function ObjectivePage() {
         {/* Botones de navegación */}
         <div className="max-w-2xl mx-auto flex justify-between items-center">
           <Link
-            href="/verification"
-            className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+            href="/"
+            className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center gap-2"
           >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
             Atrás
           </Link>
           
           <button
             onClick={handleContinue}
             disabled={!selectedObjective}
-            className="px-8 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors transform hover:scale-105"
+            className="px-8 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors transform hover:scale-105 flex items-center gap-2"
           >
             Continuar al Test
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
       </div>
