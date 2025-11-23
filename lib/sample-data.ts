@@ -3,138 +3,126 @@ import { UserProfile } from './matching-algorithm'
 export const sampleUsers: UserProfile[] = [
   {
     id: 'user1',
+    user_id: 'user1',
     objective: 'amistad',
-    personality: {
-      extraversion: 4.2,
-      amabilidad: 4.8,
-      escrupulosidad: 3.5,
-      estabilidad_emocional: 4.0,
-      apertura: 3.8
+    big_five_scores: {
+      extraversion: 4,
+      amabilidad: 3,
+      escrupulosidad: 2,
+      estabilidad_emocional: 3,
+      apertura: 4
     },
     interests: ['musica', 'arte', 'lectura'],
-    values: {
-      life_goal: 'conocer_gente',
+    values_goals: {
+      life_goal: 'relacion_seria',
       core_values: 'honestidad',
-      future_vision: 'viajando'
+      future_vision: 'familia'
     },
     lifestyle: {
-      schedule_management: 2,
+      schedule_management: 3,
       alcohol_consumption: 2,
-      social_energy: 1,
+      social_energy: 4,
       life_pace: 2
     },
-    compatibility_vector: {
-      openness: 3.8,
-      conscientiousness: 3.5,
-      extraversion: 4.2,
-      agreeableness: 4.8,
-      stability: 4.0,
-      ambition: 0,
-      family_orientation: 0,
-      social_level: 1,
-      structure_level: 2
+    compatibility_vector: {},
+    user_data: {
+      personal_data: {
+        name: 'Javier Rodriguez',
+        email: 'javier@ejemplo.com'
+      }
     }
   },
   {
     id: 'user2',
+    user_id: 'user2',
     objective: 'networking',
-    personality: {
-      extraversion: 3.8,
-      amabilidad: 4.0,
-      escrupulosidad: 4.5,
-      estabilidad_emocional: 3.2,
-      apertura: 4.2
+    big_five_scores: {
+      extraversion: 3,
+      amabilidad: 4,
+      escrupulosidad: 3,
+      estabilidad_emocional: 2,
+      apertura: 3
     },
     interests: ['tecnologia', 'emprendimiento', 'lectura'],
-    values: {
-      life_goal: 'algo_que_crezca',
-      core_values: 'ambicion',
-      future_vision: 'carrera'
+    values_goals: {
+      life_goal: 'carrera',
+      core_values: 'responsabilidad',
+      future_vision: 'independiente'
     },
     lifestyle: {
-      schedule_management: 1,
-      alcohol_consumption: 2,
-      social_energy: 2,
-      life_pace: 1
+      schedule_management: 4,
+      alcohol_consumption: 1,
+      social_energy: 3,
+      life_pace: 3
     },
-    compatibility_vector: {
-      openness: 4.2,
-      conscientiousness: 4.5,
-      extraversion: 3.8,
-      agreeableness: 4.0,
-      stability: 3.2,
-      ambition: 1,
-      family_orientation: 0,
-      social_level: 2,
-      structure_level: 1
+    compatibility_vector: {},
+    user_data: {
+      personal_data: {
+        name: 'Sofia Garcia',
+        email: 'sofia@ejemplo.com'
+      }
     }
   },
   {
     id: 'user3',
+    user_id: 'user3',
     objective: 'relacion',
-    personality: {
-      extraversion: 2.8,
-      amabilidad: 4.5,
-      escrupulosidad: 3.8,
-      estabilidad_emocional: 4.2,
-      apertura: 3.5
+    big_five_scores: {
+      extraversion: 2,
+      amabilidad: 5,
+      escrupulosidad: 4,
+      estabilidad_emocional: 3,
+      apertura: 2
     },
-    interests: ['naturaleza', 'mascotas', 'cine_series'],
-    values: {
-      life_goal: 'relacion_seria',
+    interests: ['viajes', 'gastronomia', 'actividad_fisica'],
+    values_goals: {
+      life_goal: 'algo_que_crezca',
       core_values: 'lealtad',
-      future_vision: 'familia'
+      future_vision: 'tradicional'
     },
     lifestyle: {
       schedule_management: 2,
-      alcohol_consumption: 1,
-      social_energy: 3,
-      life_pace: 2
+      alcohol_consumption: 3,
+      social_energy: 2,
+      life_pace: 1
     },
-    compatibility_vector: {
-      openness: 3.5,
-      conscientiousness: 3.8,
-      extraversion: 2.8,
-      agreeableness: 4.5,
-      stability: 4.2,
-      ambition: 0,
-      family_orientation: 1,
-      social_level: 3,
-      structure_level: 2
+    compatibility_vector: {},
+    user_data: {
+      personal_data: {
+        name: 'Elena Ramirez',
+        email: 'elena@ejemplo.com'
+      }
     }
   },
   {
     id: 'user4',
+    user_id: 'user4',
     objective: 'amistad',
-    personality: {
-      extraversion: 4.5,
-      amabilidad: 4.2,
-      escrupulosidad: 3.2,
-      estabilidad_emocional: 3.8,
-      apertura: 4.5
+    big_five_scores: {
+      extraversion: 3,
+      amabilidad: 3,
+      escrupulosidad: 3,
+      estabilidad_emocional: 4,
+      apertura: 3
     },
-    interests: ['viajes', 'gastronomia', 'actividad_fisica'],
-    values: {
+    interests: ['naturaleza', 'mascotas', 'cine_series'],
+    values_goals: {
       life_goal: 'conocer_gente',
-      core_values: 'calma',
+      core_values: 'aventura',
       future_vision: 'viajando'
     },
     lifestyle: {
       schedule_management: 3,
       alcohol_consumption: 2,
-      social_energy: 1,
-      life_pace: 1
+      social_energy: 3,
+      life_pace: 2
     },
-    compatibility_vector: {
-      openness: 4.5,
-      conscientiousness: 3.2,
-      extraversion: 4.5,
-      agreeableness: 4.2,
-      stability: 3.8,
-      ambition: 0,
-      family_orientation: 0,
-      social_level: 1,
-      structure_level: 3
+    compatibility_vector: {},
+    user_data: {
+      personal_data: {
+        name: 'Daniel Torres',
+        email: 'daniel@ejemplo.com'
+      }
     }
   }
 ]
