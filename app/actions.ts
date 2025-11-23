@@ -1,70 +1,82 @@
 'use server';
 
-import { generateText, embed } from 'ai'; // Importamos 'embed' para vectores
+import { generateText, embed } from 'ai';
 import { google } from '@ai-sdk/google';
-import { createClient } from '@supabase/supabase-js'; // Cliente de base de datos
-import { z } from 'zod';
+import { createClient } from '@supabase/supabase-js';
 
-// Conexión a Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const profileSchema = z.object({
-  goal: z.enum(['amistad', 'networking', 'relacion']),
-  hobbies: z.string(),
-  values: z.string(),
-  personality: z.string(),
-});
-
-export async function generatePersonalityReport(formData: FormData) {
-  const rawData = {
-    goal: formData.get('goal'),
-    hobbies: formData.get('hobbies'),
-    values: formData.get('values'),
-    personality: formData.get('personality'),
-  };
-
-  const validatedData = profileSchema.safeParse(rawData);
-  
-  if (!validatedData.success) return { success: false, error: 'Datos inválidos' };
-  
-  const data = validatedData.data;
-
+export async function saveProfileAndGetMatches(fullProfile: any) {
   try {
-    // 1. GENERAR REPORTE (TEXTO)
-    const { text: report } = await generateText({
-      model: google('gemini-2.5-flash'),
-      system: 'Eres un psicólogo experto. Sé breve y directo.',
-      prompt: `Analiza: Objetivo ${data.goal}, Hobbies ${data.hobbies}, Valores ${data.values}, Personalidad ${data.personality}. Dame un consejo de conexión.`,
-    });
+    // 1. Preparar el texto para el "ADN Matemático" (Vector)
+    // Juntamos toda la info importante en un solo texto para la IA
+    const description = `
+      Objetivo: ${fullProfile.goal}.
+      Personalidad Big Five: ${JSON.stringify(fullProfile.bigFive)}.
+      Intereses: ${fullProfile.hobbies.join(", ")}.
+      Valores: ${fullProfile.values.main}, futuro: ${fullProfile.values.future}.
+      Estilo de vida: ${fullProfile.lifestyle.social}, ${fullProfile.lifestyle.rhythm}.
+    `;
 
-    // 2. GENERAR VECTOR (MATEMÁTICAS)
-    // Convertimos todo el perfil del usuario en números
+    // 2. Generar Vector (Embedding)
     const { embedding } = await embed({
       model: google.textEmbeddingModel('text-embedding-004'),
-      value: `${data.goal} ${data.hobbies} ${data.values} ${data.personality}`,
+      value: description,
     });
 
-    // 3. GUARDAR EN BASE DE DATOS
-    const { error } = await supabase
+    // 3. Generar Reporte de Autoconocimiento (IA Generativa)
+    const { text: aiReport } = await generateText({
+      model: google('gemini-2.5-flash'),
+      system: 'Eres un psicólogo experto en perfiles de estudiantes.',
+      prompt: `
+        Genera un "Reporte de Autoconocimiento" (máx 60 palabras) para este usuario basado en:
+        ${description}
+        
+        Estructura:
+        - Tus fortalezas: (2 rasgos clave)
+        - Tu entorno ideal: (dónde encaja mejor)
+        - Consejo de conexión: (cómo romper el hielo)
+        Usa formato Markdown simple (negritas).
+      `,
+    });
+
+    // 4. Guardar Usuario en Base de Datos
+    // Nota: En un caso real usaríamos el ID de autenticación. Aquí creamos uno nuevo.
+    const { data: savedUser, error: saveError } = await supabase
       .from('users')
       .insert({
-        goal: data.goal,
-        hobbies: data.hobbies,
-        values_text: data.values,
-        personality: data.personality,
-        ai_report: report,
-        embedding: embedding, // ¡Aquí guardamos el "alma" digital!
-      });
+        name: fullProfile.name || 'Usuario Nuevo', // Recuperamos nombre si existe
+        age: fullProfile.age || 20,
+        goal: fullProfile.goal,
+        big_five_scores: fullProfile.bigFive,
+        hobbies_list: fullProfile.hobbies,
+        value_main: fullProfile.values.main,
+        ai_report: aiReport,
+        embedding: embedding,
+        verified: true // Asumimos verificado para el flujo
+      })
+      .select()
+      .single();
 
-    if (error) throw new Error(error.message);
+    if (saveError) throw new Error(saveError.message);
 
-    return { success: true, report: report };
+    // 5. BUSCAR MATCHES (La magia del Vector Search)
+    // Llamamos a la función SQL 'match_users' que creamos antes
+    const { data: matches, error: matchError } = await supabase.rpc('match_users', {
+      query_embedding: embedding,
+      match_threshold: 0.1, // Umbral de similitud (0 a 1)
+      match_count: 5 // Top 5 matches
+    });
 
-  } catch (error) {
-    console.error("Error:", error);
-    return { success: false, error: 'Error al guardar tu perfil.' };
+    if (matchError) throw new Error(matchError.message);
+
+    return { success: true, report: aiReport, matches: matches };
+
+  } catch (error: any) {
+    console.error("Error backend:", error);
+    return { success: false, error: error.message };
   }
 }
