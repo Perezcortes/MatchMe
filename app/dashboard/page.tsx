@@ -1,97 +1,325 @@
+// app/dashboard/page.tsx (VERSIÓN MEJORADA)
 'use client';
 
 import { useEffect, useState } from 'react';
-import { User, Star, MessageCircle, ShieldCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../src/context/AuthContext';
+import { Heart, X, MessageCircle, User, LogOut, AlertCircle } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+interface Match {
+  id: string;
+  matched_user_id: string;
+  compatibility_score: number;
+  breakdown: {
+    personality: number;
+    hobbies: number;
+    values: number;
+    lifestyle: number;
+  };
+  status: string;
+  user_profile?: any;
+}
+
 export default function DashboardPage() {
-  const [data, setData] = useState<any>(null);
+  const router = useRouter();
+  const { user, profile, signOut, loading: authLoading } = useAuth();
+  
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loadingMatches, setLoadingMatches] = useState(true);
+  const [error, setError] = useState('');
 
+  // Proteger ruta
   useEffect(() => {
-    // Cargar resultados guardados
-    const stored = localStorage.getItem('matchme_results');
-    if (stored) {
-      setData(JSON.parse(stored));
+    if (!authLoading && !user) {
+      router.push('/login');
     }
-  }, []);
+  }, [user, authLoading, router]);
 
-  if (!data) return <div className="min-h-screen flex items-center justify-center">Cargando tus conexiones...</div>;
+  // Cargar matches
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchMatches = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('matches')
+          .select('*, user_profile:users!matched_user_id(*)')
+          .eq('user_id', user.id)
+          .neq('status', 'rejected')
+          .order('compatibility_score', { ascending: false });
+
+        if (error) throw error;
+        setMatches(data || []);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoadingMatches(false);
+      }
+    };
+
+    fetchMatches();
+  }, [user]);
+
+  const handleLike = async () => {
+    const currentMatch = matches[currentIndex];
+    if (!currentMatch) return;
+
+    try {
+      await supabase
+        .from('matches')
+        .update({ status: 'accepted' })
+        .eq('id', currentMatch.id);
+
+      moveToNext();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handlePass = async () => {
+    const currentMatch = matches[currentIndex];
+    if (!currentMatch) return;
+
+    try {
+      await supabase
+        .from('matches')
+        .update({ status: 'rejected' })
+        .eq('id', currentMatch.id);
+
+      moveToNext();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const moveToNext = () => {
+    if (currentIndex < matches.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      setMatches([]);
+      setCurrentIndex(0);
+    }
+  };
+
+  const currentMatch = matches[currentIndex];
+
+  if (authLoading || loadingMatches) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando matches...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+      
       {/* Header */}
-      <header className="bg-white shadow-sm p-4 sticky top-0 z-10">
-        <div className="flex justify-between items-center max-w-2xl mx-auto">
-          <h1 className="text-xl font-black text-blue-900">MatchMe</h1>
-          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">
-            Yo
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">MatchMe</h1>
+            <p className="text-sm text-gray-600">¡Conecta con tu tribu!</p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <Link href="/profile">
+              <button className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition">
+                <User size={20} />
+                <span className="hidden sm:inline">Mi Perfil</span>
+              </button>
+            </Link>
+            
+            <button 
+              onClick={async () => {
+                await signOut();
+                router.push('/login');
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+            >
+              <LogOut size={20} />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto p-4 space-y-6">
+      <main className="max-w-4xl mx-auto px-6 py-8">
         
-        {/* 1. REPORTE DE AUTOCONOCIMIENTO (IA) */}
-        <section className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg animate-in fade-in-50">
-          <div className="flex items-center gap-2 mb-3">
-            <Star className="text-yellow-300 fill-yellow-300" size={20} />
-            <h2 className="font-bold text-lg">Tu Reporte Personal</h2>
+        {/* Error Alert */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+            <AlertCircle className="text-red-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{error}</p>
           </div>
-          <div className="prose prose-invert text-sm leading-relaxed opacity-90">
-            {/* Renderizamos el markdown de la IA */}
-            <p className="whitespace-pre-line">{data.report}</p>
+        )}
+
+        {matches.length === 0 ? (
+          // Empty State
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div className="mb-4 text-6xl">🎉</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {currentIndex > 0 ? '¡Lo hiciste!' : 'Cargando matches...'}
+            </h2>
+            <p className="text-gray-600 mb-6">
+              {currentIndex > 0 
+                ? 'Has revisado todos los matches disponibles. ¡Vuelve pronto para más!'
+                : 'Estamos analizando la compatibilidad. Por favor espera.'}
+            </p>
+            <Link href="/">
+              <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg transition">
+                Volver al Inicio
+              </button>
+            </Link>
           </div>
-        </section>
+        ) : (
+          <div className="grid lg:grid-cols-3 gap-8">
+            
+            {/* Card Principal */}
+            <div className="lg:col-span-2">
+              {currentMatch && currentMatch.user_profile && (
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                  
+                  {/* Imagen de Perfil */}
+                  <div className="relative h-96 bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center">
+                    {currentMatch.user_profile.profile_photo_url ? (
+                      <img 
+                        src={currentMatch.user_profile.profile_photo_url} 
+                        alt={currentMatch.user_profile.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User size={100} className="text-white" />
+                    )}
+                  </div>
 
-        {/* 2. MATCHES POTENCIALES */}
-        <section>
-          <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
-            <User className="text-blue-600" /> Matches Sugeridos
-          </h3>
-          
-          <div className="space-y-4">
-            {data.matches && data.matches.map((match: any, index: number) => (
-              <div key={match.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition flex gap-4 items-start">
-                
-                {/* Avatar Simulado */}
-                <div className="w-16 h-16 bg-gray-200 rounded-full flex-shrink-0 overflow-hidden relative">
-                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${match.id}`} alt="avatar" />
-                </div>
-
-                <div className="flex-1">
-                  <div className="flex justify-between items-start">
+                  {/* Info del Usuario */}
+                  <div className="p-8 space-y-4">
                     <div>
-                      <h4 className="font-bold text-gray-900 flex items-center gap-1">
-                        {match.name || 'Estudiante'} 
-                        {/* Icono de verificado si aplica */}
-                        <ShieldCheck size={14} className="text-green-500" />
-                      </h4>
-                      <p className="text-xs text-gray-500 line-clamp-2">{match.hobbies}</p>
+                      <h2 className="text-3xl font-bold text-gray-900">
+                        {currentMatch.user_profile.name}, {currentMatch.user_profile.age}
+                      </h2>
+                      <p className="text-gray-600">{currentMatch.user_profile.city}</p>
                     </div>
-                    <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">
-                      {Math.round(match.similarity * 100)}% Compatible
-                    </span>
-                  </div>
 
-                  <div className="mt-3 flex gap-2">
-                    <button className="flex-1 bg-blue-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-blue-700">
-                      Conectar
-                    </button>
-                    <button className="p-2 border rounded-lg text-gray-500 hover:bg-gray-50">
-                      <MessageCircle size={16} />
-                    </button>
+                    {/* Compatibilidad Desglosada */}
+                    <div className="bg-blue-50 rounded-lg p-4 space-y-3">
+                      <p className="font-semibold text-gray-900">Compatibilidad</p>
+                      <div className="space-y-2">
+                        {Object.entries(currentMatch.breakdown).map(([key, value]: any) => (
+                          <div key={key}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="capitalize">{key}</span>
+                              <span className="font-bold">{(value * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-600 h-2 rounded-full transition-all"
+                                style={{ width: `${value * 100}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-4 border-t border-blue-200">
+                        <p className="text-lg font-bold text-blue-600">
+                          Score Total: {(currentMatch.compatibility_score * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Intereses */}
+                    {currentMatch.user_profile.hobbies_list && (
+                      <div>
+                        <p className="font-semibold text-gray-900 mb-2">Intereses</p>
+                        <div className="flex flex-wrap gap-2">
+                          {currentMatch.user_profile.hobbies_list.map((hobby: string) => (
+                            <span key={hobby} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">
+                              {hobby}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Valores */}
+                    {currentMatch.user_profile.values_main && (
+                      <div>
+                        <p className="font-semibold text-gray-900 mb-2">Valores</p>
+                        <p className="text-gray-700">{currentMatch.user_profile.values_main}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
 
-            {data.matches?.length === 0 && (
-              <div className="text-center p-8 text-gray-500">
-                No hay matches exactos aún. ¡Invita a más amigos!
+            {/* Acciones Laterales */}
+            <div className="lg:col-span-3 lg:col-span-1">
+              <div className="bg-white rounded-2xl shadow-lg p-8 space-y-4">
+                
+                {/* Puntuación Grande */}
+                <div className="text-center mb-6">
+                  <div className="text-6xl font-bold text-blue-600 mb-2">
+                    {currentMatch ? (currentMatch.compatibility_score * 100).toFixed(0) : 0}%
+                  </div>
+                  <p className="text-gray-600 font-semibold">Compatibilidad</p>
+                </div>
+
+                {/* Botones de Acción */}
+                <div className="space-y-3">
+                  <button
+                    onClick={handleLike}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-lg transition flex items-center justify-center gap-2 text-lg"
+                  >
+                    <Heart size={24} fill="white" />
+                    Me Interesa
+                  </button>
+
+                  <button
+                    onClick={handlePass}
+                    className="w-full bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-4 rounded-lg transition flex items-center justify-center gap-2 text-lg"
+                  >
+                    <X size={24} />
+                    Pasar
+                  </button>
+                </div>
+
+                {/* Chat Button */}
+                {currentMatch?.status === 'accepted' && (
+                  <Link href={`/chat/${currentMatch.id}`}>
+                    <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2">
+                      <MessageCircle size={20} />
+                      Iniciar Chat
+                    </button>
+                  </Link>
+                )}
+
+                {/* Contador */}
+                <div className="text-center pt-4 border-t">
+                  <p className="text-sm text-gray-600">
+                    {currentIndex + 1} de {matches.length}
+                  </p>
+                </div>
               </div>
-            )}
+            </div>
           </div>
-        </section>
+        )}
       </main>
     </div>
   );
