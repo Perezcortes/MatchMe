@@ -1,137 +1,129 @@
-// app/login/page.tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/app/src/context/AuthContext';
-import { Mail, Lock, AlertCircle, Loader } from 'lucide-react';
-import Link from 'next/link';
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
 
-export default function LoginPage() {
-  const router = useRouter();
-  const { signIn } = useAuth();
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function Login() {
+  const router = useRouter()
+  const supabase = createClient()
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  })
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+    e.preventDefault()
+    setLoading(true)
 
     try {
-      if (!email || !password) {
-        throw new Error('Email y contraseña son requeridos');
-      }
-      
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        throw new Error('Email inválido');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      if (error) throw error
+
+      // Verificar si el usuario completó el test
+      const { data: userProfile } = await supabase
+        .from('user_compatibility_profiles')
+        .select('*')
+        .eq('user_id', data.user.id)
+        .single()
+
+      if (userProfile) {
+        router.push('/matches')
+      } else {
+        router.push('/test/objective')
       }
 
-      await signIn(email, password);
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+    } catch (error: any) {
+      console.error('Error en login:', error)
+      alert(error.message || 'Error al iniciar sesión. Verifica tus credenciales.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-900 text-white p-6">
-      
-      <div className="absolute top-0 left-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl"></div>
-
-      <div className="z-10 w-full max-w-md">
-        
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6">
+        {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black mb-2">MatchMe</h1>
-          <p className="text-blue-100">Conecta con la gente correcta</p>
+          <Link href="/" className="inline-block">
+            <div className="bg-purple-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+              <span className="text-xl font-bold text-white">MM</span>
+            </div>
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">Iniciar sesión</h1>
+          <p className="text-gray-600 mt-2">Bienvenido de vuelta</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl p-8 space-y-6">
-          
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="text-red-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Correo electrónico
             </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3.5 text-gray-400 w-5 h-5" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none text-gray-900 transition"
-                placeholder="tu@email.com"
-                disabled={loading}
-              />
-            </div>
+            <input
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+              placeholder="tu@email.com"
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Contraseña
             </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 text-gray-400 w-5 h-5" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none text-gray-900 transition"
-                placeholder="••••••••"
-                disabled={loading}
-              />
-            </div>
+            <input
+              type="password"
+              required
+              value={formData.password}
+              onChange={(e) => handleInputChange('password', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+              placeholder="Tu contraseña"
+            />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? (
-              <>
-                <Loader className="w-5 h-5 animate-spin" />
-                Iniciando sesión...
-              </>
-            ) : (
-              'Iniciar Sesión'
-            )}
+            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
           </button>
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">¿No tienes cuenta?</span>
-            </div>
-          </div>
-
-          <Link href="/register">
-            <button
-              type="button"
-              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold py-3 rounded-lg transition"
-            >
-              Crear Cuenta
-            </button>
-          </Link>
         </form>
 
-        <p className="text-center text-blue-200 text-xs mt-6">
-          Al iniciar sesión aceptas nuestros términos y condiciones
-        </p>
+        <div className="mt-6 text-center">
+          <Link 
+            href="/forgot-password" 
+            className="text-purple-600 text-sm hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <p className="text-center text-gray-600 text-sm">
+            ¿No tienes cuenta?{' '}
+            <Link href="/register" className="text-purple-600 font-semibold hover:underline">
+              Regístrate aquí
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
-  );
+  )
 }
