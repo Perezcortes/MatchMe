@@ -154,7 +154,7 @@ export default function Verification() {
       const ineBackUrl = await uploadFile(uploads.ineBack, `${userId}/ine-back-${timestamp}.jpg`) 
       const selfieUrl = await uploadFile(uploads.selfie, `${userId}/selfie-${timestamp}.jpg`)
 
-      // 2. Guardar en la base de datos
+      // 2. Guardar en la base de datos - SOLO LAS COLUMNAS QUE EXISTEN
       const { error: verificationError } = await supabase
         .from('verification_docs')
         .insert({
@@ -162,8 +162,8 @@ export default function Verification() {
           ine_front_url: ineFrontUrl,
           ine_back_url: ineBackUrl,
           selfie_url: selfieUrl,
-          is_verified: false,
-          submitted_at: new Date().toISOString()
+          is_verified: false
+          // NO incluir submitted_at - la columna created_at se llena automáticamente
         })
 
       if (verificationError) {
@@ -171,7 +171,7 @@ export default function Verification() {
         throw verificationError
       }
 
-      // 3. Actualizar estado del usuario
+      // 3. Actualizar estado del usuario en la tabla users
       const { error: updateError } = await supabase
         .from('users')
         .update({ verification_status: 'pending' })
