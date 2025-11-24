@@ -4,6 +4,8 @@
 import { generateText, embed } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createClient } from '@supabase/supabase-js';
+import { redirect } from 'next/navigation';
+import { createServerClientWrapper } from '@/lib/supabase-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -227,4 +229,17 @@ export async function calculateCompatibility(
       },
     };
   }
+}
+
+/**
+ * Acción de servidor para cerrar sesión de forma segura
+ */
+export async function signOut() {
+  // Usamos el wrapper que maneja las cookies del servidor
+  const supabase = await createServerClientWrapper();
+  
+  await supabase.auth.signOut();
+  
+  // Redirigir al login después de cerrar sesión
+  redirect('/login');
 }

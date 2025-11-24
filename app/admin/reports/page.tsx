@@ -51,26 +51,44 @@ export default function AdminReportsPage() {
   }, [])
 
   const checkAdminAccess = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      router.push('/login')
-      return
-    }
-    
-    // Verificar si el usuario es admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    try {
+      // 1. Obtener la sesión actual de forma segura
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-    if (userData?.role !== 'admin') {
-      alert('Acceso denegado. Solo administradores pueden acceder a esta página.')
-      router.push('/')
-      return
+      if (sessionError || !session?.user) {
+        console.log('No hay sesión activa o error de sesión, redirigiendo al login.')
+        router.push('/login')
+        return
+      }
+
+      // 2. Verificar el rol del usuario en la base de datos
+      const { data: userData, error: roleError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+
+      if (roleError || userData?.role !== 'admin') {
+        console.warn('Acceso denegado: El usuario no tiene rol de admin.')
+        alert('Acceso denegado. Solo administradores pueden acceder a esta página.')
+        router.push('/') // Redirigir al home o a /matches
+        return
+      }
+
+      // Si llegamos aquí, es admin. Podemos cargar los reportes.
+      loadReports()
+
+    } catch (error) {
+      console.error('Error verificando acceso de admin:', error)
+      router.push('/login')
     }
   }
+
+  // Actualiza el useEffect para que SOLO llame a checkAdminAccess
+  useEffect(() => {
+    checkAdminAccess()
+    // Eliminamos loadReports() de aquí porque ahora lo llamamos dentro de checkAdminAccess si todo sale bien.
+  }, [])
 
   const loadReports = async () => {
     try {
@@ -95,11 +113,11 @@ export default function AdminReportsPage() {
 
   const updateReportStatus = async (reportId: string, newStatus: string) => {
     setUpdating(reportId)
-    
+
     try {
       const { error } = await supabase
         .from('user_reports')
-        .update({ 
+        .update({
           status: newStatus,
           updated_at: new Date().toISOString()
         })
@@ -109,7 +127,7 @@ export default function AdminReportsPage() {
 
       // Recargar reports
       await loadReports()
-      
+
     } catch (error) {
       console.error('Error actualizando reporte:', error)
       alert('Error al actualizar el reporte')
@@ -121,7 +139,7 @@ export default function AdminReportsPage() {
   const takeModerationAction = async (reportedUserId: string, action: string, reason: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) {
         alert('Debes iniciar sesión para realizar esta acción')
         return
@@ -139,7 +157,7 @@ export default function AdminReportsPage() {
       if (error) throw error
 
       alert('Acción de moderación aplicada correctamente')
-      
+
     } catch (error) {
       console.error('Error aplicando moderación:', error)
       alert('Error al aplicar la acción de moderación')
@@ -184,11 +202,10 @@ export default function AdminReportsPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      report.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        report.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                      }`}>
                       {statusLabels[report.status] || report.status}
                     </span>
                     <div className="text-xs text-gray-500 mt-1">
@@ -215,18 +232,18 @@ export default function AdminReportsPage() {
                         <option key={value} value={value}>{label}</option>
                       ))}
                     </select>
-                    
+
                     <button
                       onClick={() => takeModerationAction(
-                        report.reported_user_id, 
-                        'warning', 
+                        report.reported_user_id,
+                        'warning',
                         `Reporte: ${reportTypeLabels[report.report_type]}`
                       )}
                       className="text-sm bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600"
                     >
                       Advertir
                     </button>
-                    
+
                     <button
                       onClick={() => takeModerationAction(
                         report.reported_user_id,
@@ -238,7 +255,7 @@ export default function AdminReportsPage() {
                       Suspender
                     </button>
                   </div>
-                  
+
                   {updating === report.id && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
                   )}

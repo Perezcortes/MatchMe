@@ -1,3 +1,4 @@
+// app/login/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -19,21 +20,43 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // 1. Iniciar sesión
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       })
 
-      if (error) throw error
+      if (authError) throw authError
+      if (!authData.user) throw new Error('No se pudo obtener el usuario')
 
-      // Verificar si el usuario completó el test
-      const { data: userProfile } = await supabase
-        .from('user_compatibility_profiles')
-        .select('*')
-        .eq('user_id', data.user.id)
+      // 2. NUEVO: Obtener el perfil completo para verificar el ROL
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users') // Consultamos la tabla principal de usuarios
+        .select('role')
+        .eq('id', authData.user.id)
         .single()
 
-      if (userProfile) {
+      if (profileError) {
+         console.error('Error al obtener perfil:', profileError);
+         // Si falla, asumimos rol de usuario normal por seguridad
+      }
+
+      // 3. NUEVO: Lógica de redirección basada en el ROL
+      if (userProfile?.role === 'admin') {
+        // Si es admin, va directo a su panel
+        router.push('/admin/reports')
+        return // Terminamos aquí
+      }
+
+      // 4. Si NO es admin, seguimos el flujo normal de usuarios
+      // Verificar si el usuario completó el test
+      const { data: compatibilityProfile } = await supabase
+        .from('user_compatibility_profiles')
+        .select('id') // Solo necesitamos saber si existe
+        .eq('user_id', authData.user.id)
+        .maybeSingle() // Usamos maybeSingle para que no lance error si no existe
+
+      if (compatibilityProfile) {
         router.push('/matches')
       } else {
         router.push('/test/objective')
@@ -54,6 +77,7 @@ export default function Login() {
     }))
   }
 
+  // ... (El resto del JSX del formulario sigue exactamente igual)
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-4 px-4 sm:py-8">
       <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-4 sm:p-6">

@@ -1,4 +1,16 @@
 // Algoritmo de compatibilidad mejorado
+// Interfaz auxiliar para los datos personales
+interface PersonalData {
+  name?: string;
+  lastName?: string; // Agregado
+  email?: string;
+  age?: string | number; // Agregado (puede ser string del input o number)
+  city?: string; // Agregado
+  gender?: string; // Agregado
+  orientation?: string; // Agregado
+  // Permite cualquier otra propiedad futura sin romper el tipo
+  [key: string]: any; 
+}
 
 export interface UserProfile {
   id: string;
@@ -20,10 +32,8 @@ export interface UserProfile {
   lifestyle: any;
   compatibility_vector: any;
   user_data?: {
-    personal_data?: {
-      name?: string;
-      email?: string;
-    };
+    // Usamos la nueva interfaz detallada aquí
+    personal_data?: PersonalData;
   };
 }
 
@@ -353,16 +363,22 @@ export async function findBestMatchesReal(
   limit: number = 10
 ): Promise<MatchResult[]> {
   try {
-    //console.log("🔍 Starting real match search for user:", currentUser.id);
-    //console.log("👤 Current user data structure:", {
-      //hasBigFive: !!currentUser.big_five_scores,
-      //hasValuesGoals: !!currentUser.values_goals,
-      //hasInterests: Array.isArray(currentUser.interests),
-      //interestsCount: currentUser.interests?.length || 0,
-    //});
+    console.log("🔍 Starting real match search for user:", currentUser.id);
+    console.log("👤 Current user data structure:", {
+      hasBigFive: !!currentUser.big_five_scores,
+      hasValuesGoals: !!currentUser.values_goals,
+      hasInterests: Array.isArray(currentUser.interests),
+      interestsCount: currentUser.interests?.length || 0,
+    });
 
     const realProfiles = await getRealUserProfiles(currentUser.id);
-    //console.log("📊 Real profiles found:", realProfiles.length);
+    console.log("📊 Real profiles found:", realProfiles.length);
+
+    // 🔥 **SOLUCIÓN CRÍTICA: Usar SOLO datos reales, nunca datos de muestra**
+    if (realProfiles.length === 0) {
+      console.log("❌ No real profiles found. User needs to wait for more users to join.");
+      return []; // Devolver array vacío en lugar de usar datos de muestra
+    }
 
     // Validar estructura de perfiles reales
     const validRealProfiles = realProfiles.filter((profile) => {
@@ -373,97 +389,85 @@ export async function findBestMatchesReal(
         profile.values_goals;
 
       if (!isValid) {
-        //console.warn("❌ Invalid profile structure:", {
-          //id: profile.id,
-          //hasBigFive: !!profile.big_five_scores,
-          //hasValuesGoals: !!profile.values_goals,
-          //hasInterests: Array.isArray(profile.interests),
-        //});
+        console.warn("❌ Invalid profile structure:", {
+          id: profile.id,
+          hasBigFive: !!profile.big_five_scores,
+          hasValuesGoals: !!profile.values_goals,
+          hasInterests: Array.isArray(profile.interests),
+        });
       }
 
       return isValid;
     });
 
-    //console.log("✅ Valid real profiles:", validRealProfiles.length);
+    console.log("✅ Valid real profiles:", validRealProfiles.length);
 
-    let allProfiles = [...validRealProfiles];
+    // 🔥 **USAR SOLO PERFILES REALES VÁLIDOS**
+    const allProfiles = [...validRealProfiles];
 
-    // Solo usar datos de ejemplo si no hay suficientes perfiles reales válidos
-    if (allProfiles.length < 2) {
-      //console.log("⚠️ Complementing with sample data");
-      //const sampleProfiles = sampleUsers.filter(
-        //(user) =>
-          //user &&
-          //user.id !== currentUser.id &&
-          //user.big_five_scores &&
-          //Array.isArray(user.interests)
-      //);
-      //allProfiles = [...allProfiles, ...sampleProfiles];
-      //console.log(
-        //"📋 Total profiles after adding samples:",
-        //allProfiles.length
-      //);
-    } else {
-      //console.log("✅ Using only real user data");
+    if (allProfiles.length === 0) {
+      console.log("❌ No valid real profiles available.");
+      return [];
     }
 
-    // Calcular compatibilidad para todos los perfiles
+    console.log("🎯 Using ONLY real user data, no sample data");
+
+    // Calcular compatibilidad para todos los perfiles REALES
     const matches = allProfiles
       .map((user) => {
         try {
-          //console.log(`🎯 Calculating compatibility with user: ${user.id}`);
-          //console.log("📋 User structure:", {
-            //hasBigFive: !!user.big_five_scores,
-            //hasValuesGoals: !!user.values_goals,
-            //hasInterests: Array.isArray(user.interests),
-          //});
+          console.log(`🎯 Calculating compatibility with real user: ${user.id}`);
+          console.log("📋 Real user structure:", {
+            name: user.user_data?.personal_data?.name,
+            hasBigFive: !!user.big_five_scores,
+            hasValuesGoals: !!user.values_goals,
+            hasInterests: Array.isArray(user.interests),
+          });
 
           const match = calculateCompatibility(currentUser, user);
-          //console.log(
-            //`✅ Compatibility with ${user.id}: ${match.compatibilityScore}%`
-          //);
+          console.log(
+            `✅ Compatibility with ${user.user_data?.personal_data?.name || user.id}: ${match.compatibilityScore}%`
+          );
           return match;
         } catch (error) {
-          //);
-          //console.log("🔍 User data that caused error:", {
-            //id: user.id,
-            //big_five_scores: user.big_five_scores,
-            //values_goals: user.values_goals,
-            //interests: user.interests,
-          //});
+          console.error(
+            `❌ Error calculating compatibility with ${user.id}:`,
+            error
+          );
+          console.log("🔍 User data that caused error:", {
+            id: user.id,
+            big_five_scores: user.big_five_scores,
+            values_goals: user.values_goals,
+            interests: user.interests,
+          });
           return null;
         }
       })
       .filter(
         (match): match is MatchResult =>
-          match !== null && match.compatibilityScore >= 30
+          match !== null && match.compatibilityScore >= 20 // Bajar el umbral para mostrar más matches reales
       )
       .sort((a, b) => b.compatibilityScore - a.compatibilityScore)
       .slice(0, limit);
 
-    //console.log(
-      //`🎉 Generated ${matches.length} matches from ${allProfiles.length} total profiles`
-    //);
+    console.log(
+      `🎉 Generated ${matches.length} REAL matches from ${allProfiles.length} real profiles`
+    );
 
-    // Log para debugging
+    // Log para debugging - mostrar nombres REALES
     matches.forEach((match, index) => {
-      //console.log(
-      //  `🏆 Match ${index + 1}: ${match.compatibilityScore}% - ${match.user.id}`
-      //);
+      const userName = match.user.user_data?.personal_data?.name || 'Unknown';
+      const userEmail = match.user.user_data?.personal_data?.email || 'No email';
+      console.log(
+        `🏆 Real Match ${index + 1}: ${match.compatibilityScore}% - ${userName} (${userEmail})`
+      );
     });
 
     return matches;
   } catch (error) {
-    //console.error("❌ Error in findBestMatchesReal:", error);
-    // En caso de error, usar solo datos de ejemplo válidos
-    //console.log("🔄 Falling back to sample data");
-    const validSampleUsers = sampleUsers.filter(
-      (user) =>
-        user &&
-        user.id !== currentUser.id &&
-        user.big_five_scores &&
-        Array.isArray(user.interests)
-    );
-    return findBestMatches(currentUser, validSampleUsers, limit);
+    console.error("❌ Error in findBestMatchesReal:", error);
+    // 🔥 **NO USAR DATOS DE MUESTRA NI EN CASO DE ERROR**
+    console.log("🔄 Returning empty array instead of sample data");
+    return [];
   }
 }

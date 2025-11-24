@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 const cities = [
+  'Huajuapan de León, México',
   'Tamazulapan del Progreso, México',
   'Acatlán de Osorio, México', 
   'Santiago Juxtlahuaca, México',

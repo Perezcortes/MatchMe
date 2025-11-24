@@ -1,3 +1,10 @@
+// lib/icons.ts
+
+// 1. Importamos React y los tipos necesarios de react-icons
+import React from 'react';
+import { IconBaseProps } from 'react-icons';
+
+// 2. Tus importaciones existentes de iconos
 import { 
   FaHeart, FaUserFriends, FaHandshake, FaMusic, FaPalette, 
   FaPlane, FaFilm, FaBook, FaGamepad, FaMountain, 
@@ -7,7 +14,15 @@ import {
   FaInfoCircle, FaArrowLeft, FaArrowRight
 } from 'react-icons/fa'
 
-export const iconMap = {
+// 3. Definimos la interfaz para cada entrada del mapa
+// Esto le dice a TS: "Cada entrada tiene un icono (que es un componente React que acepta props básicas de icono) y un color (string)"
+interface IconMapEntry {
+  icon: React.ComponentType<IconBaseProps>;
+  color: string;
+}
+
+// 4. Definimos el mapa con el tipo explícito Record<string, IconMapEntry>
+export const iconMap: Record<string, IconMapEntry> = {
   // Objetivos
   amistad: { icon: FaUserFriends, color: 'text-blue-600' },
   networking: { icon: FaHandshake, color: 'text-green-600' },
@@ -48,7 +63,45 @@ export const iconMap = {
   // Iconos generales
   info: { icon: FaInfoCircle, color: 'text-blue-500' },
   arrow_left: { icon: FaArrowLeft, color: 'text-current' },
-  arrow_right: { icon: FaArrowRight, color: 'text-current' }
+  arrow_right: { icon: FaArrowRight, color: 'text-current' },
+
+  // 5. Iconos personalizados actualizados con tipos explícitos
+  logout: {
+    // Usamos (props: IconBaseProps) para que coincida con el tipo esperado
+    icon: (props: IconBaseProps) => (
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        fill="none" 
+        viewBox="0 0 24 24" 
+        strokeWidth={1.5} 
+        stroke="currentColor" 
+        // Usamos props.size y props.className
+        width={props.size} 
+        height={props.size} 
+        className={props.className}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062m0 0-2.062-2.062m2.062 2.062H7.5" />
+      </svg>
+    ),
+    color: "text-gray-600",
+  },
+  usuario: {
+    // Usamos (props: IconBaseProps) para que coincida con el tipo esperado
+    icon: (props: IconBaseProps) => (
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        viewBox="0 0 24 24" 
+        fill="currentColor" 
+        // Usamos props.size y props.className
+        width={props.size} 
+        height={props.size} 
+        className={props.className}
+      >
+        <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.602-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
+      </svg>
+    ),
+    color: "text-gray-600",
+  },
 }
 
 export type IconType = keyof typeof iconMap
