@@ -1,12 +1,12 @@
-// app/profile/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getCurrentUserProfile, updateUserPersonalData, PersonalDataUpdate } from '@/lib/user-service'
+// Importamos tu cliente personalizado
+import { createClient } from '@/lib/supabase' 
+import { updateUserPersonalData, PersonalDataUpdate } from '@/lib/user-service'
 import Icon from '../components/Icon'
 
-// --- CAMBIO 1: Definir la misma lista de ciudades que en el registro ---
 const cities = [
   'Huajuapan de León, México',
   'Tamazulapan del Progreso, México',
@@ -19,6 +19,9 @@ const cities = [
 
 export default function ProfilePage() {
   const router = useRouter()
+  // CORRECCIÓN: Inicializamos sin argumentos porque tu helper ya los tiene
+  const supabase = createClient() 
+  
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
@@ -34,48 +37,57 @@ export default function ProfilePage() {
   })
 
   useEffect(() => {
-    loadUserProfile()
-  }, [])
+    const initProfile = async () => {
+      try {
+        setLoading(true)
+        
+        // 1. Verificar Sesión
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        
+        if (authError || !user) {
+          console.log("No session found")
+          router.push('/login')
+          return
+        }
+        
+        setUserId(user.id)
 
-  const loadUserProfile = async () => {
-    try {
-      const profile = await getCurrentUserProfile()
+        // 2. Cargar Datos Directos de la Tabla Users
+        const { data: profiles, error: dbError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.id)
+          .limit(1)
 
-      if (!profile || !profile.user_id) {
-        router.push('/login')
-        return
+        if (dbError) throw dbError
+
+        const profile = profiles && profiles.length > 0 ? profiles[0] : null
+
+        if (profile) {
+            // Cargar datos al formulario
+            setFormData({
+                name: profile.name || '',
+                lastName: profile.lastname || '',
+                age: profile.age?.toString() || '',
+                city: profile.city || '',
+                gender: profile.gender || 'prefiero_no_decir',
+                orientation: profile.orientation || 'prefiero_no_decir'
+            })
+        } else {
+            console.warn("Perfil no encontrado en DB, permitiendo creación.")
+            setFormData(prev => ({ ...prev, name: 'Usuario Nuevo' }))
+        }
+
+      } catch (error: any) {
+        console.error('Error loading profile:', error)
+        setMessage({ type: 'error', text: 'Error cargando datos: ' + error.message })
+      } finally {
+        setLoading(false)
       }
-
-      setUserId(profile.user_id)
-
-      const pd = profile.user_data?.personal_data || {}
-      
-      // Aseguramos que la ciudad cargada esté en la lista, si no, 'Otro' o vacío
-      let loadedCity = pd.city || '';
-      if (loadedCity && !cities.includes(loadedCity)) {
-          // Si la ciudad guardada no está en la lista actual, podrías:
-          // 1. Añadirla dinámicamente a la lista
-          // 2. Dejarla seleccionada (el select lo permite aunque no esté en las opciones visibles)
-          // 3. O forzarla a 'Otro' si prefieres normalizar.
-          // Por ahora, dejaremos que el valor se cargue tal cual. El select lo mostrará.
-      }
-
-      setFormData({
-        name: pd.name || '',
-        lastName: pd.lastName || '',
-        age: pd.age?.toString() || '',
-        city: loadedCity, // Usamos el valor cargado
-        gender: pd.gender || 'prefiero_no_decir',
-        orientation: pd.orientation || 'prefiero_no_decir'
-      })
-
-    } catch (error) {
-      console.error('Error loading profile:', error)
-      setMessage({ type: 'error', text: 'No se pudo cargar la información del perfil.' })
-    } finally {
-      setLoading(false)
     }
-  }
+
+    initProfile()
+  }, [router]) // Quitamos 'supabase' de dependencias para evitar loops
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -90,14 +102,26 @@ export default function ProfilePage() {
     setMessage({ type: '', text: '' })
 
     try {
-      const result = await updateUserPersonalData(userId, formData)
-      if (result.success) {
-        setMessage({ type: 'success', text: '¡Información actualizada correctamente!' })
-      } else {
-        throw new Error('Falló la actualización')
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Hubo un error al guardar los cambios.' })
+      const { error } = await supabase
+        .from('users')
+        .upsert({
+            id: userId,
+            name: formData.name,
+            lastname: formData.lastName,
+            age: parseInt(formData.age) || 18,
+            city: formData.city,
+            gender: formData.gender,
+            orientation: formData.orientation,
+            updated_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+
+      setMessage({ type: 'success', text: '¡Información actualizada correctamente!' })
+      
+    } catch (error: any) {
+      console.error('Error saving:', error)
+      setMessage({ type: 'error', text: 'Hubo un error al guardar los cambios: ' + error.message })
     } finally {
       setSaving(false)
       setTimeout(() => {
@@ -114,11 +138,21 @@ export default function ProfilePage() {
     )
   }
 
+  // Si hay error crítico de carga
+  if (message.type === 'error' && !userId) {
+    return (
+        <div className="p-8 text-center text-red-600">
+            <p>Error: {message.text}</p>
+            <button onClick={() => window.location.reload()} className="underline mt-4">Reintentar</button>
+        </div>
+    )
+  }
+
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Encabezado (sin cambios) */}
+          {/* Encabezado */}
           <div className="bg-gradient-to-r from-purple-600 to-blue-500 p-6 sm:p-10 text-white text-center relative overflow-hidden">
             <div className="relative z-10">
                 <div className="bg-white/20 p-4 rounded-full inline-block mb-4 backdrop-blur-sm">
@@ -191,7 +225,7 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                {/* --- CAMBIO 2: Reemplazar input de texto por select para Ciudad --- */}
+                {/* Ciudad */}
                 <div>
                   <label htmlFor="city" className="block text-sm font-semibold text-gray-700 mb-2">Ciudad</label>
                   <div className="relative">
@@ -208,11 +242,8 @@ export default function ProfilePage() {
                         <option key={city} value={city} className="text-gray-900">{city}</option>
                       ))}
                     </select>
-                    {/* Icono de flecha para el select */}
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
+                      <Icon name="flecha_derecha" size={16} className="transform rotate-90" />
                     </div>
                   </div>
                 </div>
@@ -237,9 +268,7 @@ export default function ProfilePage() {
                       <option value="prefiero_no_decir">Prefiero no decir</option>
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
+                       <Icon name="flecha_derecha" size={16} className="transform rotate-90" />
                     </div>
                   </div>
                 </div>
@@ -262,15 +291,13 @@ export default function ProfilePage() {
                       <option value="prefiero_no_decir">Prefiero no decir</option>
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
+                       <Icon name="flecha_derecha" size={16} className="transform rotate-90" />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Botón de guardar (sin cambios) */}
+              {/* Botón de guardar */}
               <div className="pt-4">
                 <button
                   type="submit"
@@ -279,10 +306,7 @@ export default function ProfilePage() {
                 >
                   {saving ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                      <div className="animate-spin -ml-1 mr-3 h-5 w-5 text-white border-2 border-white border-t-transparent rounded-full"></div>
                       Guardando...
                     </>
                   ) : (
@@ -294,7 +318,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Enlaces adicionales (sin cambios) */}
+        {/* Enlaces adicionales */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <a href="/test/report" className="flex items-center p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all group">
                 <div className="bg-purple-100 p-3 rounded-lg group-hover:bg-purple-200 transition-colors mr-4">

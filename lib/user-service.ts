@@ -13,10 +13,16 @@ export interface PersonalDataUpdate {
 
 export async function updateUserPersonalData(userId: string, data: PersonalDataUpdate) {
   try {
-    // Actualizamos la columna personal_data que es un JSONB
     const { error } = await supabase
       .from('users')
-      .update({ personal_data: data })
+      .update({ 
+        name: data.name,
+        lastname: data.lastName,
+        age: parseInt(data.age),
+        city: data.city,
+        gender: data.gender,
+        orientation: data.orientation
+      })
       .eq('id', userId);
 
     if (error) throw error;
@@ -30,74 +36,53 @@ export async function updateUserPersonalData(userId: string, data: PersonalDataU
 export async function getRealUserProfiles(currentUserId: string): Promise<UserProfile[]> {
   try {
     const { data: rawProfiles, error } = await supabase
-      .from('user_compatibility_profiles')
+      .from('users')
       .select('*')
-      .neq('user_id', currentUserId)
-      .not('big_five_scores', 'is', null)
-      .not('interests', 'is', null)
+      .neq('id', currentUserId)
+      .not('big_five_scores', 'is', null) // Aquí sí exigimos test completo para los matches
+      .not('hobbies_list', 'is', null)
 
     if (error) {
       console.error('Error fetching user profiles:', error)
       return []
     }
 
-    // Eliminar duplicados y mantener el más reciente
-    const uniqueProfilesMap = new Map()
-    rawProfiles?.forEach(profile => {
-      if (profile && profile.big_five_scores && Array.isArray(profile.interests)) {
-        if (!uniqueProfilesMap.has(profile.user_id) || 
-            new Date(profile.created_at) > new Date(uniqueProfilesMap.get(profile.user_id).created_at)) {
-          uniqueProfilesMap.set(profile.user_id, profile)
-        }
-      }
-    })
+    if (!rawProfiles || rawProfiles.length === 0) return []
 
-    const uniqueProfiles = Array.from(uniqueProfilesMap.values())
-    const userIds = uniqueProfiles.map(profile => profile.user_id)
-
-    if (userIds.length === 0) {
-      return []
-    }
-
-    // Obtener datos de usuarios
-    const { data: userRecords, error: usersError } = await supabase
-      .from('users')
-      .select('id, email, personal_data')
-      .in('id', userIds)
-
-    if (usersError) {
-      console.error('Error fetching user records:', usersError)
-    }
-
-    // Crear mapa de datos de usuario
-    const userDataMap = new Map()
-    userRecords?.forEach(user => {
-      const userData = extractUserDataFromPersonalData(user)
-      userDataMap.set(user.id, userData)
-    })
-
-    // Construir perfiles completos
-    const completeProfiles = uniqueProfiles.map((profile) => {
-      const userData = userDataMap.get(profile.user_id)
-      
-      if (!userData) {
-        return {
-          ...profile,
-          user_data: {
-            personal_data: {
-              name: `Usuario_${profile.user_id.substring(0, 8)}`,
-              email: `user${profile.user_id.substring(0, 8)}@matchme.com`
-            }
+    // Mapeo corregido
+    const completeProfiles: UserProfile[] = rawProfiles.map((user: any) => {
+      return {
+        id: user.id,
+        user_id: user.id,
+        objective: user.goal,
+        big_five_scores: user.big_five_scores,
+        interests: user.hobbies_list || [],
+        
+        values_goals: {
+            core_values: user.value_main,
+            future_vision: user.value_future,
+            life_goal: user.goal
+        },
+        
+        lifestyle: {
+            social: user.lifestyle_social,
+            alcohol: user.lifestyle_alcohol,
+            rhythm: user.lifestyle_rhythm
+        },
+        compatibility_vector: null,
+        created_at: user.created_at,
+        
+        user_data: {
+          personal_data: {
+            name: user.name ? `${user.name} ${user.lastname || ''}`.trim() : 'Estudiante Anónimo',
+            email: user.email,
+            age: user.age,
+            city: user.city,
+            gender: user.gender,
+            orientation: user.orientation
           }
         }
-      }
-
-      return {
-        ...profile,
-        user_data: {
-          personal_data: userData
-        }
-      }
+      } as UserProfile
     })
 
     return completeProfiles
@@ -108,106 +93,77 @@ export async function getRealUserProfiles(currentUserId: string): Promise<UserPr
   }
 }
 
-function extractUserDataFromPersonalData(userRecord: any) {
-  const personalData = userRecord.personal_data
-  const email = userRecord.email
-  
-  let fullName = ''
-
-  // Parsear personal_data si es string
-  let parsedPersonalData = personalData
-  if (typeof personalData === 'string') {
-    try {
-      parsedPersonalData = JSON.parse(personalData)
-    } catch (error) {
-      parsedPersonalData = {}
-    }
-  }
-
-  // Extraer nombre y apellido
-  if (typeof parsedPersonalData === 'object' && parsedPersonalData !== null) {
-    const firstName = parsedPersonalData.name || ''
-    const lastName = parsedPersonalData.lastName || ''
-    
-    if (firstName && lastName) {
-      fullName = `${firstName} ${lastName}`.trim()
-    } else if (firstName) {
-      fullName = firstName
-    }
-  }
-
-  // Si no hay nombre, usar email
-  if (!fullName && email) {
-    fullName = extractNameFromEmail(email)
-  }
-
-  // Si todavía no hay nombre, generar uno
-  if (!fullName) {
-    fullName = `Usuario_${userRecord.id.substring(0, 8)}`
-  }
-
-  return {
-    name: fullName,
-    firstName: parsedPersonalData?.name || '',
-    lastName: parsedPersonalData?.lastName || '',
-    email: email,
-    age: parsedPersonalData?.age,
-    city: parsedPersonalData?.city,
-    gender: parsedPersonalData?.gender,
-    orientation: parsedPersonalData?.orientation
-  }
-}
-
-function extractNameFromEmail(email: string): string {
-  if (!email) return ''
-  
-  const emailPart = email.split('@')[0]
-  
-  if (emailPart.includes('.')) {
-    const nameParts = emailPart.split('.')
-    const formattedName = nameParts
-      .filter(part => part.length > 1)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-      .join(' ')
-    
-    if (formattedName) return formattedName
-  }
-  
-  if (emailPart.length > 2 && !emailPart.includes('user')) {
-    return emailPart.charAt(0).toUpperCase() + emailPart.slice(1).toLowerCase()
-  }
-  
-  return ''
-}
-
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   try {
+    // 1. Obtener usuario autenticado
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user) {
+        console.warn("getCurrentUserProfile: No auth user")
+        return null
+    }
 
-    const { data: profile, error } = await supabase
-      .from('user_compatibility_profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (error || !profile) return null
-
-    // Obtener datos del usuario
-    const { data: userData } = await supabase
+    // 2. Obtener perfil de forma INDESTRUCTIBLE
+    // Usamos .limit(1) en lugar de .single()/.maybeSingle() para evitar error 406
+    const { data: profiles, error } = await supabase
       .from('users')
-      .select('email, personal_data')
+      .select('*')
       .eq('id', user.id)
-      .single()
+      .limit(1)
+
+    if (error) {
+        console.error("getCurrentUserProfile DB Error:", error)
+        return null
+    }
+
+    // Si la lista está vacía, no hay perfil
+    if (!profiles || profiles.length === 0) {
+        console.warn("getCurrentUserProfile: No profile found in DB")
+        return null
+    }
+
+    const profile = profiles[0] // Tomamos el primero manualmente
+
+    // 3. Validación y Mapeo
+    // Aceptamos el perfil si tiene al menos un objetivo (goal)
+    const hasBasicData = profile.goal || profile.name;
+
+    if (!hasBasicData) {
+        console.warn("getCurrentUserProfile: Perfil existe pero está vacío")
+        return null
+    }
 
     return {
-      ...profile,
+      id: profile.id,
+      user_id: profile.id,
+      objective: profile.goal || 'amistad',
+      big_five_scores: profile.big_five_scores || {},
+      interests: profile.hobbies_list || [],
+      
+      values_goals: {
+          core_values: profile.value_main || '',
+          future_vision: profile.value_future || '',
+          life_goal: profile.goal || ''
+      },
+      
+      lifestyle: {
+          social: profile.lifestyle_social || '',
+          alcohol: profile.lifestyle_alcohol || '',
+          rhythm: profile.lifestyle_rhythm || ''
+      },
+      compatibility_vector: null,
+      created_at: profile.created_at,
       user_data: {
-        personal_data: userData?.personal_data || { email: userData?.email }
+        personal_data: {
+            name: profile.name ? `${profile.name} ${profile.lastname || ''}`.trim() : 'Yo',
+            email: profile.email,
+            age: profile.age,
+            city: profile.city,
+            gender: profile.gender,
+            orientation: profile.orientation
+        }
       }
-    }
+    } as UserProfile
+
   } catch (error) {
     console.error('Error getting current user profile:', error)
     return null
