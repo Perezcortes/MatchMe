@@ -1,14 +1,15 @@
 // app/actions.ts
-'use server';
+"use server";
 
-import { generateText, embed } from 'ai';
-import { google } from '@ai-sdk/google';
-import { createClient } from '@supabase/supabase-js';
-import { redirect } from 'next/navigation';
-import { createServerClientWrapper } from '@/lib/supabase-server';
+import { generateText, embed } from "ai";
+import { google } from "@ai-sdk/google";
+import { createClient } from "@supabase/supabase-js";
+import { redirect } from "next/navigation";
+import { createServerClientWrapper } from "@/lib/supabase-server";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
@@ -17,13 +18,13 @@ const supabase = createClient(
  */
 export async function generatePersonalityReport(formData: FormData) {
   try {
-    const goal = formData.get('goal') as string;
-    const hobbies = formData.get('hobbies') as string;
-    const values = formData.get('values') as string;
-    const personality = formData.get('personality') as string;
+    const goal = formData.get("goal") as string;
+    const hobbies = formData.get("hobbies") as string;
+    const values = formData.get("values") as string;
+    const personality = formData.get("personality") as string;
 
     if (!goal || !hobbies || !values || !personality) {
-      return { success: false, error: 'Faltan campos requeridos' };
+      return { success: false, error: "Faltan campos requeridos" };
     }
 
     const prompt = `
@@ -43,13 +44,13 @@ export async function generatePersonalityReport(formData: FormData) {
     `;
 
     const { text: report } = await generateText({
-      model: google('gemini-2.5-flash'),
+      model: google("gemini-2.5-flash"),
       prompt,
     });
 
     return { success: true, report };
   } catch (error: any) {
-    console.error('Error en generatePersonalityReport:', error);
+    console.error("Error en generatePersonalityReport:", error);
     return { success: false, error: error.message };
   }
 }
@@ -65,28 +66,30 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       Personalidad Big Five: ${JSON.stringify(fullProfile.bigFive)}.
       Intereses: ${fullProfile.hobbies.join(", ")}.
       Valores: ${fullProfile.values.main}, futuro: ${fullProfile.values.future}.
-      Estilo de vida: ${fullProfile.lifestyle.social}, ${fullProfile.lifestyle.alcohol}.
+      Estilo de vida: ${fullProfile.lifestyle.social}, ${
+      fullProfile.lifestyle.alcohol
+    }.
     `;
 
     // 2. Generar embedding
     let embedding: number[] = [];
     try {
       const { embedding: generatedEmbedding } = await embed({
-        model: google.textEmbeddingModel('text-embedding-004'),
+        model: google.textEmbeddingModel("text-embedding-004"),
         value: description,
       });
       embedding = generatedEmbedding;
     } catch (err) {
-      console.warn('Error generando embedding:', err);
+      console.warn("Error generando embedding:", err);
       // Continuar sin embedding (fallback)
     }
 
     // 3. Generar reporte de IA
-    let aiReport = '';
+    let aiReport = "";
     try {
       const { text: report } = await generateText({
-        model: google('gemini-2.5-flash'),
-        system: 'Eres un psicólogo experto en perfiles de estudiantes.',
+        model: google("gemini-2.5-flash"),
+        system: "Eres un psicólogo experto en perfiles de estudiantes.",
         prompt: `
           Genera un "Reporte de Autoconocimiento" (máx 60 palabras) basado en:
           ${description}
@@ -100,14 +103,14 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       });
       aiReport = report;
     } catch (err) {
-      console.warn('Error generando reporte:', err);
-      aiReport = 'Reporte no disponible en este momento';
+      console.warn("Error generando reporte:", err);
+      aiReport = "Reporte no disponible en este momento";
     }
 
     // 4. Actualizar usuario con embedding y reporte
     if (fullProfile.userId) {
       const { error: updateError } = await supabase
-        .from('users')
+        .from("users")
         .update({
           big_five_scores: fullProfile.bigFive,
           hobbies_list: fullProfile.hobbies,
@@ -121,10 +124,10 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
           embedding: embedding.length > 0 ? embedding : null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', fullProfile.userId);
+        .eq("id", fullProfile.userId);
 
       if (updateError) {
-        console.warn('Error updating user:', updateError);
+        console.warn("Error updating user:", updateError);
       }
     }
 
@@ -133,7 +136,7 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
     if (embedding.length > 0) {
       try {
         const { data: matchData, error: matchError } = await supabase.rpc(
-          'match_users',
+          "match_users",
           {
             query_embedding: embedding,
             match_threshold: 0.1,
@@ -142,12 +145,12 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
         );
 
         if (matchError) {
-          console.warn('Error en match_users:', matchError);
+          console.warn("Error en match_users:", matchError);
         } else {
           matches = matchData || [];
         }
       } catch (err) {
-        console.warn('Error buscando matches:', err);
+        console.warn("Error buscando matches:", err);
       }
     }
 
@@ -157,10 +160,10 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       matches: matches,
     };
   } catch (error: any) {
-    console.error('Error en saveProfileAndGetMatches:', error);
+    console.error("Error en saveProfileAndGetMatches:", error);
     return {
       success: false,
-      error: error.message || 'Error al procesar el perfil',
+      error: error.message || "Error al procesar el perfil",
     };
   }
 }
@@ -189,11 +192,12 @@ export async function calculateCompatibility(
     const personalityScore = Math.max(0, 1 - personalityDistance / 4); // Normalizar
 
     // Hobbies: Porcentaje de coincidencias
-    const commonHobbies = user1Hobbies.filter(h => user2Hobbies.includes(h));
+    const commonHobbies = user1Hobbies.filter((h) => user2Hobbies.includes(h));
     const hobbiesScore =
       user1Hobbies.length === 0 || user2Hobbies.length === 0
         ? 0.5
-        : commonHobbies.length / Math.max(user1Hobbies.length, user2Hobbies.length);
+        : commonHobbies.length /
+          Math.max(user1Hobbies.length, user2Hobbies.length);
 
     // Values: Match exacto o parcial
     const valuesScore = user1Values === user2Values ? 1 : 0.6;
@@ -218,7 +222,7 @@ export async function calculateCompatibility(
       },
     };
   } catch (error: any) {
-    console.error('Error calculating compatibility:', error);
+    console.error("Error calculating compatibility:", error);
     return {
       totalScore: 0.5,
       breakdown: {
@@ -237,9 +241,9 @@ export async function calculateCompatibility(
 export async function signOut() {
   // Usamos el wrapper que maneja las cookies del servidor
   const supabase = await createServerClientWrapper();
-  
+
   await supabase.auth.signOut();
-  
+
   // Redirigir al login después de cerrar sesión
-  redirect('/login');
+  redirect("/login");
 }
