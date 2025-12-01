@@ -48,7 +48,7 @@ export async function generatePersonalityReport(formData: FormData) {
     `;
 
     const { text: report } = await generateText({
-      model: google("gemini-1.5-flash"), // Usamos 1.5-flash que es rápido y estable
+      model: google("gemini-2.5-flash"), // Usamos 1.5-flash que es rápido y estable
       prompt,
     });
 
