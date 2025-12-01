@@ -5,14 +5,13 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { UserProfile, MatchResult, findBestMatchesReal } from '@/lib/matching-algorithm'
 import Icon from '../components/Icon'
-import { Check, X } from 'lucide-react'
+import { Check, X, Loader2 } from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Constantes de UI
 const objectiveMap = {
   amistad: { name: 'Amistad', color: 'text-blue-600 bg-blue-50 border-blue-200' },
   networking: { name: 'Networking', color: 'text-green-600 bg-green-50 border-green-200' },
@@ -24,16 +23,17 @@ const getInitials = (name: string) => {
   return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
 }
 
-// --- COMPONENTE TOAST (Notificación Flotante) ---
 const Toast = ({ message, onClose }: { message: string, onClose: () => void }) => (
-    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
-        <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700">
-            <div className="bg-green-500 rounded-full p-1">
-                <Check size={16} className="text-white" />
-            </div>
-            <div>
-                <h4 className="font-bold text-sm">¡Solicitud Enviada!</h4>
-                <p className="text-xs text-gray-300">{message}</p>
+    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 px-4 w-full sm:w-auto">
+        <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700 w-full sm:w-auto justify-between sm:justify-start">
+            <div className="flex items-center gap-4">
+                <div className="bg-green-500 rounded-full p-1">
+                    <Check size={16} className="text-white" />
+                </div>
+                <div>
+                    <h4 className="font-bold text-sm">¡Solicitud Enviada!</h4>
+                    <p className="text-xs text-gray-300">{message}</p>
+                </div>
             </div>
             <button onClick={onClose} className="ml-4 text-gray-500 hover:text-white">
                 <X size={18} />
@@ -44,22 +44,20 @@ const Toast = ({ message, onClose }: { message: string, onClose: () => void }) =
 
 export default function MatchesPage() {
   const router = useRouter()
+  
+  // Estados de Datos
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [report, setReport] = useState<string>('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [realDataCount, setRealDataCount] = useState(0)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [stats, setStats] = useState({ total: 0, highCompat: 0, commonInterests: 0, avgScore: 0 })
   
-  // Estado para estadísticas
-  const [stats, setStats] = useState({
-    total: 0,
-    highCompat: 0,
-    commonInterests: 0,
-    avgScore: 0
-  })
+  // Estados de UI
+  const [isAuthChecking, setIsAuthChecking] = useState(true)
+  const [loadingData, setLoadingData] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
 
-  // Función adaptadora para datos del servidor (si vienen del caché)
+  // Adaptador
   const adaptServerMatches = (serverMatches: any[]): MatchResult[] => {
     return serverMatches.map(m => ({
       user: {
@@ -93,62 +91,100 @@ export default function MatchesPage() {
     }))
   }
 
+  // EFECTO 1: Manejo EXCLUSIVO de Autenticación (Blindado)
   useEffect(() => {
-    const initPage = async () => {
-      try {
-        setLoading(true)
-        
-        // 1. Verificar Sesión
-        const { data: { session }, error: authError } = await supabase.auth.getSession()
-        const user = session?.user
-        
-        if (authError || !user) {
-          router.push('/login')
-          return
-        }
+    let mounted = true;
 
-        // 2. ESTRATEGIA A: Leer caché local (Rápido)
-        const storedResults = localStorage.getItem('matchme_results')
+    const checkSession = async () => {
+        try {
+            // 1. Verificar sesión actual
+            const { data: { session } } = await supabase.auth.getSession()
+            
+            if (!mounted) return;
+
+            if (session) {
+                setIsAuthChecking(false)
+                loadUserData(session.user.id)
+            } else {
+                setIsAuthChecking(true) 
+            }
+        } catch (e) {
+            console.error("Auth check error", e)
+            setIsAuthChecking(false)
+        }
+    }
+
+    checkSession()
+
+    // Escuchar cambios en tiempo real
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (!mounted) return;
         
+        console.log("Auth Event:", event)
+
+        if (session) {
+            setIsAuthChecking(false)
+            loadUserData(session.user.id)
+        } else if (event === 'SIGNED_OUT') { // CORRECCIÓN: Quitamos USER_DELETED
+            router.push('/login')
+        } else {
+            setTimeout(() => {
+                if (mounted && !session) {
+                    setIsAuthChecking(false)
+                    router.push('/login')
+                }
+            }, 1000)
+        }
+    })
+
+    return () => {
+        mounted = false;
+        subscription.unsubscribe()
+    }
+  }, [router])
+
+
+  // EFECTO 2: Carga de Datos (Separado de Auth)
+  const loadUserData = async (userId: string) => {
+      try {
+        setLoadingData(true)
+
+        // A. Intentar Cache Local primero
+        const storedResults = localStorage.getItem('matchme_results')
         if (storedResults) {
             try {
                 const parsed = JSON.parse(storedResults)
                 if (parsed.success && parsed.matches && parsed.matches.length > 0) {
-                    console.log("Usando matches del servidor (Caché)")
                     const loadedMatches = adaptServerMatches(parsed.matches)
                     setMatches(loadedMatches)
                     setReport(parsed.report || '')
                     setRealDataCount(loadedMatches.length)
                     calculateStats(loadedMatches)
-                    setLoading(false)
+                    setLoadingData(false)
                     return 
                 }
             } catch (e) { console.warn("Cache inválido") }
         }
 
-        // 3. ESTRATEGIA B: Base de Datos (Fallback Seguro)
-        // Usamos .limit(1) para evitar error 406
+        // B. Cargar de DB
         const { data: userProfiles, error: dbError } = await supabase
           .from('users')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', userId)
           .limit(1)
 
         if (dbError) throw dbError
-
         const userProfile = userProfiles && userProfiles.length > 0 ? userProfiles[0] : null
 
-        // VALIDACIÓN RELAJADA: Si existe el perfil, lo aceptamos aunque falten datos
         if (!userProfile) {
           setError("No encontramos tu usuario en la base de datos.")
-          setLoading(false)
+          setLoadingData(false)
           return
         }
 
-        // Rellenamos datos faltantes con valores por defecto para que NO falle
         const currentUserProfile: UserProfile = {
-            id: user.id,
-            user_id: user.id,
+            id: userId,
+            user_id: userId,
             objective: userProfile.goal || 'amistad',
             big_five_scores: userProfile.big_five_scores || { extraversion: 3, amabilidad: 3, escrupulosidad: 3, estabilidad_emocional: 3, apertura: 3 },
             interests: userProfile.hobbies_list || [],
@@ -166,14 +202,11 @@ export default function MatchesPage() {
             user_data: { 
                 personal_data: { 
                     name: userProfile.name || "Yo", 
-                    email: userProfile.email || "",
-                    age: userProfile.age || 20,
-                    city: userProfile.city || ""
+                    email: "" 
                 } 
             }
         }
 
-        // Calcular matches
         const bestMatches = await findBestMatchesReal(currentUserProfile, 12)
         setMatches(bestMatches)
         setReport(userProfile.ai_report || '')
@@ -181,15 +214,12 @@ export default function MatchesPage() {
         calculateStats(bestMatches)
 
       } catch (err: any) {
-        console.error('Error:', err)
+        console.error('Error data:', err)
         setError(err.message)
       } finally {
-        setLoading(false)
+        setLoadingData(false)
       }
-    }
-
-    initPage()
-  }, [router])
+  }
 
   const calculateStats = (matchesData: any[]) => {
     if (!matchesData.length) return
@@ -207,15 +237,11 @@ export default function MatchesPage() {
     setTimeout(() => setToastMsg(null), 3000)
   }
 
-  // Función para limpiar texto IA (quita asteriscos)
   const renderCleanReport = (text: string) => {
     if (!text) return null
     return text.split('\n').map((line, index) => {
-        // Limpia **negritas** y * listas
         const cleanLine = line.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1')
-        
         if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
-            // Formato de lista
             return (
                 <li key={index} className="mb-2 flex items-start text-gray-700">
                     <span className="mr-2 text-purple-500 mt-1">•</span>
@@ -224,19 +250,20 @@ export default function MatchesPage() {
             )
         }
         if (line.trim() !== '') {
-             // Párrafo normal
              return <p key={index} className="mb-2 text-gray-700" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
         }
         return null
     })
   }
 
-  if (loading) {
+  if (isAuthChecking || loadingData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center px-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Buscando conexiones...</p>
+          <Loader2 className="animate-spin rounded-full h-16 w-16 text-purple-600 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">
+            {isAuthChecking ? 'Verificando sesión...' : 'Buscando tus mejores conexiones...'}
+          </p>
         </div>
       </div>
     )
@@ -246,7 +273,7 @@ export default function MatchesPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Ups...</h2>
             <p className="text-gray-600 mb-6">{error}</p>
             <button 
                 onClick={() => router.push('/test/objective')}
@@ -321,7 +348,6 @@ export default function MatchesPage() {
                 key={i} 
                 className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 flex flex-col group border border-gray-100 overflow-hidden"
               >
-                {/* Header Card */}
                 <div className="p-5 pb-0">
                     <div className="flex justify-between items-start mb-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold border ${objectiveMap[objKey]?.color || 'text-gray-700 bg-gray-100'}`}>
@@ -339,7 +365,6 @@ export default function MatchesPage() {
                     </div>
                 </div>
 
-                {/* User Info */}
                 <div className="px-5 flex-1">
                     <div className="flex items-center gap-4 mb-4">
                         <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-full w-14 h-14 flex items-center justify-center font-bold text-xl shadow-md shrink-0">
@@ -362,7 +387,6 @@ export default function MatchesPage() {
                     </div>
                 </div>
 
-                {/* Footer Actions */}
                 <div className="p-4 mt-auto border-t border-gray-50 bg-gray-50/50">
                     <button 
                         onClick={() => handleConnect(match)}
@@ -387,7 +411,6 @@ export default function MatchesPage() {
             </div>
         )}
 
-        {/* Toast Notification */}
         {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
 
       </div>
