@@ -5,15 +5,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { UserProfile, MatchResult, findBestMatchesReal } from '@/lib/matching-algorithm'
 import Icon from '../components/Icon'
-import { Check, X, Loader2 } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 
-// Cliente Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Constantes UI
+// Constantes de UI
 const objectiveMap = {
   amistad: { name: 'Amistad', color: 'text-blue-600 bg-blue-50 border-blue-200' },
   networking: { name: 'Networking', color: 'text-green-600 bg-green-50 border-green-200' },
@@ -25,17 +24,16 @@ const getInitials = (name: string) => {
   return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
 }
 
+// --- COMPONENTE TOAST (Notificación Flotante) ---
 const Toast = ({ message, onClose }: { message: string, onClose: () => void }) => (
-    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 px-4 w-full sm:w-auto">
-        <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700 w-full sm:w-auto justify-between sm:justify-start">
-            <div className="flex items-center gap-4">
-                <div className="bg-green-500 rounded-full p-1">
-                    <Check size={16} className="text-white" />
-                </div>
-                <div>
-                    <h4 className="font-bold text-sm">¡Solicitud Enviada!</h4>
-                    <p className="text-xs text-gray-300">{message}</p>
-                </div>
+    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700">
+            <div className="bg-green-500 rounded-full p-1">
+                <Check size={16} className="text-white" />
+            </div>
+            <div>
+                <h4 className="font-bold text-sm">¡Solicitud Enviada!</h4>
+                <p className="text-xs text-gray-300">{message}</p>
             </div>
             <button onClick={onClose} className="ml-4 text-gray-500 hover:text-white">
                 <X size={18} />
@@ -53,9 +51,15 @@ export default function MatchesPage() {
   const [realDataCount, setRealDataCount] = useState(0)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   
-  const [stats, setStats] = useState({ total: 0, highCompat: 0, commonInterests: 0, avgScore: 0 })
+  // Estado para estadísticas
+  const [stats, setStats] = useState({
+    total: 0,
+    highCompat: 0,
+    commonInterests: 0,
+    avgScore: 0
+  })
 
-  // Adaptador de datos
+  // Función adaptadora para datos del servidor (si vienen del caché)
   const adaptServerMatches = (serverMatches: any[]): MatchResult[] => {
     return serverMatches.map(m => ({
       user: {
@@ -90,41 +94,40 @@ export default function MatchesPage() {
   }
 
   useEffect(() => {
-    let isMounted = true;
-
     const initPage = async () => {
       try {
         setLoading(true)
         
-        // 1. VERIFICACIÓN SIMPLE Y DIRECTA
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        // 1. Verificar Sesión
+        const { data: { session }, error: authError } = await supabase.auth.getSession()
+      const user = session?.user
         
         if (authError || !user) {
-          console.log("No user session found via getUser()")
-          if (isMounted) router.push('/login')
+          router.push('/login')
           return
         }
 
-        // 2. ESTRATEGIA A: CACHÉ (Para velocidad)
+        // 2. ESTRATEGIA A: Leer caché local (Rápido)
         const storedResults = localStorage.getItem('matchme_results')
+        
         if (storedResults) {
             try {
                 const parsed = JSON.parse(storedResults)
                 if (parsed.success && parsed.matches && parsed.matches.length > 0) {
-                    if (isMounted) {
-                        const loadedMatches = adaptServerMatches(parsed.matches)
-                        setMatches(loadedMatches)
-                        setReport(parsed.report || '')
-                        setRealDataCount(loadedMatches.length)
-                        calculateStats(loadedMatches)
-                        setLoading(false)
-                    }
+                    console.log("Usando matches del servidor (Caché)")
+                    const loadedMatches = adaptServerMatches(parsed.matches)
+                    setMatches(loadedMatches)
+                    setReport(parsed.report || '')
+                    setRealDataCount(loadedMatches.length)
+                    calculateStats(loadedMatches)
+                    setLoading(false)
                     return 
                 }
             } catch (e) { console.warn("Cache inválido") }
         }
 
-        // 3. ESTRATEGIA B: BASE DE DATOS (Si no hay caché)
+        // 3. ESTRATEGIA B: Base de Datos (Fallback Seguro)
+        // Usamos .limit(1) para evitar error 406
         const { data: userProfiles, error: dbError } = await supabase
           .from('users')
           .select('*')
@@ -132,16 +135,17 @@ export default function MatchesPage() {
           .limit(1)
 
         if (dbError) throw dbError
-        
-        // VALIDACIÓN RELAJADA (Evita expulsiones innecesarias)
+
         const userProfile = userProfiles && userProfiles.length > 0 ? userProfiles[0] : null
 
-        // Si no hay perfil, intentamos recuperarlo o mostrar error, PERO NO SACAMOS AL LOGIN
+        // VALIDACIÓN RELAJADA: Si existe el perfil, lo aceptamos aunque falten datos
         if (!userProfile) {
-          throw new Error("Tu cuenta existe pero no encontramos tu perfil de datos.")
+          setError("No encontramos tu usuario en la base de datos.")
+          setLoading(false)
+          return
         }
 
-        // Rellenar datos para el algoritmo
+        // Rellenamos datos faltantes con valores por defecto para que NO falle
         const currentUserProfile: UserProfile = {
             id: user.id,
             user_id: user.id,
@@ -164,31 +168,27 @@ export default function MatchesPage() {
                     name: userProfile.name || "Yo", 
                     email: userProfile.email || "",
                     age: userProfile.age || 20,
-                    city: userProfile.city || "" 
+                    city: userProfile.city || ""
                 } 
             }
         }
 
+        // Calcular matches
         const bestMatches = await findBestMatchesReal(currentUserProfile, 12)
-        
-        if (isMounted) {
-            setMatches(bestMatches)
-            setReport(userProfile.ai_report || '')
-            setRealDataCount(bestMatches.length)
-            calculateStats(bestMatches)
-        }
+        setMatches(bestMatches)
+        setReport(userProfile.ai_report || '')
+        setRealDataCount(bestMatches.length)
+        calculateStats(bestMatches)
 
       } catch (err: any) {
-        console.error('Error loading matches:', err)
-        if (isMounted) setError(err.message)
+        console.error('Error:', err)
+        setError(err.message)
       } finally {
-        if (isMounted) setLoading(false)
+        setLoading(false)
       }
     }
 
     initPage()
-
-    return () => { isMounted = false }
   }, [router])
 
   const calculateStats = (matchesData: any[]) => {
@@ -207,11 +207,15 @@ export default function MatchesPage() {
     setTimeout(() => setToastMsg(null), 3000)
   }
 
+  // Función para limpiar texto IA (quita asteriscos)
   const renderCleanReport = (text: string) => {
     if (!text) return null
     return text.split('\n').map((line, index) => {
+        // Limpia **negritas** y * listas
         const cleanLine = line.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1')
+        
         if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
+            // Formato de lista
             return (
                 <li key={index} className="mb-2 flex items-start text-gray-700">
                     <span className="mr-2 text-purple-500 mt-1">•</span>
@@ -220,6 +224,7 @@ export default function MatchesPage() {
             )
         }
         if (line.trim() !== '') {
+             // Párrafo normal
              return <p key={index} className="mb-2 text-gray-700" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
         }
         return null
@@ -230,8 +235,8 @@ export default function MatchesPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center px-4">
         <div className="text-center">
-          <Loader2 className="animate-spin rounded-full h-16 w-16 text-purple-600 mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Cargando tus mejores conexiones...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Buscando conexiones...</p>
         </div>
       </div>
     )
@@ -241,13 +246,13 @@ export default function MatchesPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Ups...</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
             <p className="text-gray-600 mb-6">{error}</p>
             <button 
                 onClick={() => router.push('/test/objective')}
                 className="w-full bg-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-purple-700 transition"
             >
-                Revisar mi Test
+                Ir al Test
             </button>
         </div>
       </div>
@@ -258,6 +263,7 @@ export default function MatchesPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-8 px-4">
       <div className="max-w-6xl mx-auto">
         
+        {/* Header & Reporte */}
         <div className="mb-12">
           <div className="text-center mb-8">
              <h1 className="text-3xl font-bold text-gray-900 mb-2">Tus Resultados</h1>
@@ -281,6 +287,7 @@ export default function MatchesPage() {
           )}
         </div>
 
+        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
           <div className="bg-white p-4 rounded-xl shadow text-center">
             <div className="text-2xl font-bold text-purple-600">{stats.total}</div>
@@ -300,6 +307,7 @@ export default function MatchesPage() {
           </div>
         </div>
 
+        {/* Grid de Matches */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {matches.map((match, i) => {
             const userData = match.user?.user_data?.personal_data || {}
@@ -313,6 +321,7 @@ export default function MatchesPage() {
                 key={i} 
                 className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 flex flex-col group border border-gray-100 overflow-hidden"
               >
+                {/* Header Card */}
                 <div className="p-5 pb-0">
                     <div className="flex justify-between items-start mb-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold border ${objectiveMap[objKey]?.color || 'text-gray-700 bg-gray-100'}`}>
@@ -330,6 +339,7 @@ export default function MatchesPage() {
                     </div>
                 </div>
 
+                {/* User Info */}
                 <div className="px-5 flex-1">
                     <div className="flex items-center gap-4 mb-4">
                         <div className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-full w-14 h-14 flex items-center justify-center font-bold text-xl shadow-md shrink-0">
@@ -352,6 +362,7 @@ export default function MatchesPage() {
                     </div>
                 </div>
 
+                {/* Footer Actions */}
                 <div className="p-4 mt-auto border-t border-gray-50 bg-gray-50/50">
                     <button 
                         onClick={() => handleConnect(match)}
@@ -376,6 +387,7 @@ export default function MatchesPage() {
             </div>
         )}
 
+        {/* Toast Notification */}
         {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
 
       </div>
