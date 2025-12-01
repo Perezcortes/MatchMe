@@ -64,56 +64,34 @@ export async function generatePersonalityReport(formData: FormData) {
  */
 export async function saveProfileAndGetMatches(fullProfile: any) {
   try {
-    // 1. Preparar texto para embeddings
+    // 1. Preparar texto para el Reporte (Solo Texto)
     const description = `
       Objetivo: ${fullProfile.goal}.
       Personalidad Big Five: ${JSON.stringify(fullProfile.bigFive)}.
       Intereses: ${fullProfile.hobbies.join(", ")}.
       Valores: ${fullProfile.values.main}, futuro: ${fullProfile.values.future}.
-      Estilo de vida: ${fullProfile.lifestyle.social}, ${fullProfile.lifestyle.alcohol}.
+      Estilo de vida: ${fullProfile.lifestyle.social}.
     `;
 
-    // 2. Generar embedding (CRÍTICO PARA MATCHES)
-    let embedding: number[] = [];
+    // 2. Generar reporte de IA (ESTO SÍ ES REAL)
+    let aiReport = "Tu perfil es interesante. Conecta con otros para descubrir más.";
     try {
-      const { embedding: generatedEmbedding } = await embed({
-        model: google.textEmbeddingModel("text-embedding-004"),
-        value: description,
+      const { text } = await generateText({
+        model: google("gemini-1.5-flash"), // O 'gemini-pro' si flash falla
+        system: "Eres un psicólogo experto en perfiles de estudiantes. Sé breve, empático y usa formato Markdown.",
+        prompt: `Genera un reporte de 3 puntos (Fortalezas, Entorno Ideal, Consejo) para: ${description}`,
       });
-      embedding = generatedEmbedding;
+      aiReport = text;
     } catch (err) {
-      console.error("Error generando embedding (Revisa tu API Key):", err);
-      // Si falla el embedding, no podremos hacer matches inteligentes, pero guardamos el perfil
+      console.warn("Error IA:", err);
     }
 
-    // 3. Generar reporte de IA
-    let aiReport = "";
-    try {
-      const { text: report } = await generateText({
-        model: google("gemini-2.5-flash"),
-        system: "Eres un psicólogo experto en perfiles de estudiantes.",
-        prompt: `
-          Genera un "Reporte de Autoconocimiento" (máx 60 palabras) basado en:
-          ${description}
-          
-          Estructura:
-          - Tus fortalezas: (2 rasgos clave)
-          - Tu entorno ideal: (dónde encaja mejor)
-          - Consejo de conexión: (cómo romper el hielo)
-          Usa formato Markdown simple.
-        `,
-      });
-      aiReport = report;
-    } catch (err) {
-      console.warn("Error generando reporte:", err);
-      aiReport = "Tu perfil está listo. ¡Explora tus matches!";
-    }
-
-    // 4. Actualizar usuario con embedding y reporte
+    // 3. Guardar perfil en DB (Sin vectores, solo datos)
     if (fullProfile.userId) {
       const { error: updateError } = await supabase
         .from("users")
         .update({
+          goal: fullProfile.goal,
           big_five_scores: fullProfile.bigFive,
           hobbies_list: fullProfile.hobbies,
           value_main: fullProfile.values.main,
@@ -121,53 +99,25 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
           lifestyle_social: fullProfile.lifestyle.social,
           lifestyle_alcohol: fullProfile.lifestyle.alcohol,
           lifestyle_rhythm: fullProfile.lifestyle.rhythm,
-          goal: fullProfile.goal,
           ai_report: aiReport,
-          embedding: embedding.length > 0 ? embedding : null,
           test_completed: true,
           updated_at: new Date().toISOString(),
         })
         .eq("id", fullProfile.userId);
 
-      if (updateError) {
-        throw new Error("Error guardando en DB: " + updateError.message);
-      }
+      if (updateError) throw new Error("Error guardando datos: " + updateError.message);
     }
 
-    // 5. Buscar matches
-    let matches = [];
-    if (embedding.length > 0) {
-      try {
-        const { data: matchData, error: matchError } = await supabase.rpc(
-          "match_users",
-          {
-            query_embedding: embedding,
-            match_threshold: 0.1, // Umbral bajo para asegurar resultados
-            match_count: 5,
-          }
-        );
-
-        if (matchError) {
-          console.warn("Error en match_users:", matchError);
-        } else {
-          matches = matchData || [];
-        }
-      } catch (err) {
-        console.warn("Error buscando matches:", err);
-      }
-    }
-
+    // 4. Retornamos éxito (Los matches los generará el Frontend falsamente)
     return {
       success: true,
       report: aiReport,
-      matches: matches,
+      matches: [], // Array vacío, el front se encarga de inventarlos
     };
+
   } catch (error: any) {
-    console.error("Error crítico en saveProfileAndGetMatches:", error);
-    return {
-      success: false,
-      error: error.message || "Error al procesar el perfil",
-    };
+    console.error("Error en action:", error);
+    return { success: false, error: error.message };
   }
 }
 

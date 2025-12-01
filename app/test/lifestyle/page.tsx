@@ -148,7 +148,7 @@ export default function LifestylePage() {
                 localStorage.removeItem('valuesAnswers')
 
                 // Redirigir al Dashboard final (Matches)
-                router.push('/test/report') 
+                router.push('/matches') 
             } else {
                 throw new Error(result.error || 'Error desconocido en el servidor')
             }
