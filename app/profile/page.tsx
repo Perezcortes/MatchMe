@@ -144,10 +144,6 @@ export default function ProfilePage() {
             <button onClick={() => router.back()} className="text-gray-600">
                 <ArrowLeft size={24} />
             </button>
-            <h1 className="font-bold text-gray-900">Mi Perfil</h1>
-            <button onClick={handleSignOut} className="text-red-500">
-                <LogOut size={24} />
-            </button>
         </div>
 
         <div className="max-w-3xl mx-auto md:pt-8 px-4 sm:px-6">
