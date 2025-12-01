@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-// Importamos tu cliente personalizado
-import { createClient } from '@/lib/supabase' 
+import { createClient } from '@/lib/supabase'
 import { updateUserPersonalData, PersonalDataUpdate } from '@/lib/user-service'
 import Icon from '../components/Icon'
+import { User, ArrowLeft, Save, LogOut, CheckCircle, AlertTriangle } from 'lucide-react'
+
+const supabase = createClient()
 
 const cities = [
   'Huajuapan de León, México',
@@ -19,9 +21,6 @@ const cities = [
 
 export default function ProfilePage() {
   const router = useRouter()
-  // CORRECCIÓN: Inicializamos sin argumentos porque tu helper ya los tiene
-  const supabase = createClient() 
-  
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
@@ -40,19 +39,15 @@ export default function ProfilePage() {
     const initProfile = async () => {
       try {
         setLoading(true)
-        
-        // 1. Verificar Sesión
         const { data: { user }, error: authError } = await supabase.auth.getUser()
         
         if (authError || !user) {
-          console.log("No session found")
           router.push('/login')
           return
         }
         
         setUserId(user.id)
 
-        // 2. Cargar Datos Directos de la Tabla Users
         const { data: profiles, error: dbError } = await supabase
           .from('users')
           .select('*')
@@ -64,7 +59,6 @@ export default function ProfilePage() {
         const profile = profiles && profiles.length > 0 ? profiles[0] : null
 
         if (profile) {
-            // Cargar datos al formulario
             setFormData({
                 name: profile.name || '',
                 lastName: profile.lastname || '',
@@ -74,7 +68,6 @@ export default function ProfilePage() {
                 orientation: profile.orientation || 'prefiero_no_decir'
             })
         } else {
-            console.warn("Perfil no encontrado en DB, permitiendo creación.")
             setFormData(prev => ({ ...prev, name: 'Usuario Nuevo' }))
         }
 
@@ -87,7 +80,7 @@ export default function ProfilePage() {
     }
 
     initProfile()
-  }, [router]) // Quitamos 'supabase' de dependencias para evitar loops
+  }, [router])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -117,11 +110,11 @@ export default function ProfilePage() {
 
       if (error) throw error
 
-      setMessage({ type: 'success', text: '¡Información actualizada correctamente!' })
+      setMessage({ type: 'success', text: '¡Perfil actualizado correctamente!' })
       
     } catch (error: any) {
       console.error('Error saving:', error)
-      setMessage({ type: 'error', text: 'Hubo un error al guardar los cambios: ' + error.message })
+      setMessage({ type: 'error', text: 'Error al guardar: ' + error.message })
     } finally {
       setSaving(false)
       setTimeout(() => {
@@ -130,208 +123,202 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-      </div>
-    )
+  const handleSignOut = async () => {
+      await supabase.auth.signOut()
+      router.push('/login')
   }
 
-  // Si hay error crítico de carga
-  if (message.type === 'error' && !userId) {
+  if (loading) {
     return (
-        <div className="p-8 text-center text-red-600">
-            <p>Error: {message.text}</p>
-            <button onClick={() => window.location.reload()} className="underline mt-4">Reintentar</button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-600"></div>
+      </div>
     )
   }
 
   return (
-    <div className="py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Encabezado */}
-          <div className="bg-gradient-to-r from-purple-600 to-blue-500 p-6 sm:p-10 text-white text-center relative overflow-hidden">
-            <div className="relative z-10">
-                <div className="bg-white/20 p-4 rounded-full inline-block mb-4 backdrop-blur-sm">
-                    <Icon name="usuario" size={64} className="text-white" />
+    <div className="min-h-screen bg-gray-50 pb-12">
+        
+        {/* Mobile Header Bar */}
+        <div className="bg-white sticky top-0 z-20 border-b border-gray-200 px-4 py-3 flex justify-between items-center md:hidden shadow-sm">
+            <button onClick={() => router.back()} className="text-gray-600">
+                <ArrowLeft size={24} />
+            </button>
+            <h1 className="font-bold text-gray-900">Mi Perfil</h1>
+            <button onClick={handleSignOut} className="text-red-500">
+                <LogOut size={24} />
+            </button>
+        </div>
+
+        <div className="max-w-3xl mx-auto md:pt-8 px-4 sm:px-6">
+            
+            {/* Profile Card */}
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+                
+                {/* Cover & Avatar */}
+                <div className="h-32 bg-gradient-to-r from-purple-600 to-indigo-600 relative">
+                    <div className="absolute -bottom-12 left-6 md:left-10">
+                        <div className="w-24 h-24 rounded-full bg-white p-1 shadow-md">
+                            <div className="w-full h-full bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
+                                <User size={48} className="text-gray-400" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <h1 className="text-3xl font-bold mb-2">Mi Perfil</h1>
-                <p className="text-purple-100 text-lg">Gestiona tu información personal</p>
+
+                {/* Info Header */}
+                <div className="pt-14 px-6 md:px-10 pb-6 border-b border-gray-100">
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        {formData.name} {formData.lastName}
+                    </h1>
+                    <p className="text-gray-500 text-sm font-medium mt-1 flex items-center gap-1">
+                        <Icon name="networking" size={14} /> {formData.city || 'Ubicación no definida'}
+                    </p>
+                </div>
+
+                {/* Formulario */}
+                <div className="p-6 md:p-10">
+                    
+                    {message.text && (
+                        <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-red-50 text-red-800 border border-red-100'}`}>
+                            {message.type === 'success' ? <CheckCircle size={20} className="mt-0.5 shrink-0" /> : <AlertTriangle size={20} className="mt-0.5 shrink-0" />}
+                            <span className="text-sm font-medium">{message.text}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre</label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-white shadow-sm font-medium"
+                                    placeholder="Tu nombre"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Apellido</label>
+                                <input
+                                    type="text"
+                                    name="lastName"
+                                    value={formData.lastName}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-white shadow-sm font-medium"
+                                    placeholder="Tu apellido"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Edad</label>
+                                <input
+                                    type="number"
+                                    name="age"
+                                    value={formData.age}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-white shadow-sm font-medium"
+                                    min="18"
+                                    max="99"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Ciudad</label>
+                                <select
+                                    name="city"
+                                    value={formData.city}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-white shadow-sm font-medium"
+                                    required
+                                >
+                                    <option value="" disabled>Selecciona...</option>
+                                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pb-6 border-b border-gray-100">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Género</label>
+                                <select
+                                    name="gender"
+                                    value={formData.gender}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-white shadow-sm font-medium"
+                                >
+                                    <option value="mujer">Mujer</option>
+                                    <option value="hombre">Hombre</option>
+                                    <option value="no_binario">No binario</option>
+                                    <option value="otro">Otro</option>
+                                    <option value="prefiero_no_decir">Prefiero no decir</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Orientación</label>
+                                <select
+                                    name="orientation"
+                                    value={formData.orientation}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-300 text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-white shadow-sm font-medium"
+                                >
+                                    <option value="heterosexual">Heterosexual</option>
+                                    <option value="homosexual">Homosexual</option>
+                                    <option value="bisexual">Bisexual</option>
+                                    <option value="pansexual">Pansexual</option>
+                                    <option value="prefiero_no_decir">Prefiero no decir</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-gray-800 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            {saving ? (
+                                <>
+                                    <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                                    Guardando...
+                                </>
+                            ) : (
+                                <>
+                                    <Save size={20} />
+                                    Guardar Cambios
+                                </>
+                            )}
+                        </button>
+
+                    </form>
+                </div>
             </div>
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-10">
-                <Icon name="networking" size={300} className="absolute -top-20 -left-20 text-white transform rotate-12" />
-                <Icon name="amistad" size={250} className="absolute -bottom-20 -right-20 text-white transform -rotate-12" />
-            </div>
-          </div>
 
-          <div className="p-6 sm:p-10">
-            {message.text && (
-              <div className={`mb-8 p-4 rounded-xl flex items-center ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
-                <Icon name={message.type === 'success' ? 'check' : 'alert'} size={20} className={`mr-3 ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`} />
-                {message.text}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Nombre */}
-                <div>
-                  <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">Nombre</label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    required
-                    placeholder="Tu nombre"
-                  />
-                </div>
-                {/* Apellido */}
-                <div>
-                  <label htmlFor="lastName" className="block text-sm font-semibold text-gray-700 mb-2">Apellido</label>
-                  <input
-                    type="text"
-                    id="lastName"
-                    name="lastName"
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    required
-                    placeholder="Tu apellido"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Edad */}
-                <div>
-                  <label htmlFor="age" className="block text-sm font-semibold text-gray-700 mb-2">Edad</label>
-                  <input
-                    type="number"
-                    id="age"
-                    name="age"
-                    value={formData.age}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
-                    required
-                    min="18"
-                    max="120"
-                    placeholder="Ej. 25"
-                  />
-                </div>
-
-                {/* Ciudad */}
-                <div>
-                  <label htmlFor="city" className="block text-sm font-semibold text-gray-700 mb-2">Ciudad</label>
-                  <div className="relative">
-                    <select
-                      id="city"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white appearance-none"
-                    >
-                      <option value="" disabled className="text-gray-500">Selecciona tu ciudad</option>
-                      {cities.map(city => (
-                        <option key={city} value={city} className="text-gray-900">{city}</option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                      <Icon name="flecha_derecha" size={16} className="transform rotate-90" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-6 border-b border-gray-100">
-                {/* Género */}
-                <div>
-                  <label htmlFor="gender" className="block text-sm font-semibold text-gray-700 mb-2">Género</label>
-                  <div className="relative">
-                    <select
-                      id="gender"
-                      name="gender"
-                      value={formData.gender}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white appearance-none"
-                    >
-                      <option value="hombre">Hombre</option>
-                      <option value="mujer">Mujer</option>
-                      <option value="no_binario">No binario</option>
-                      <option value="otro">Otro</option>
-                      <option value="prefiero_no_decir">Prefiero no decir</option>
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                       <Icon name="flecha_derecha" size={16} className="transform rotate-90" />
-                    </div>
-                  </div>
-                </div>
-                {/* Orientación */}
-                <div>
-                  <label htmlFor="orientation" className="block text-sm font-semibold text-gray-700 mb-2">Orientación Sexual</label>
-                  <div className="relative">
-                    <select
-                      id="orientation"
-                      name="orientation"
-                      value={formData.orientation}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white appearance-none"
-                    >
-                      <option value="heterosexual">Heterosexual</option>
-                      <option value="homosexual">Homosexual</option>
-                      <option value="bisexual">Bisexual</option>
-                      <option value="pansexual">Pansexual</option>
-                      <option value="otro">Otra</option>
-                      <option value="prefiero_no_decir">Prefiero no decir</option>
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                       <Icon name="flecha_derecha" size={16} className="transform rotate-90" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Botón de guardar */}
-              <div className="pt-4">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className={`w-full sm:w-auto sm:min-w-[200px] flex justify-center items-center py-4 px-8 border border-transparent rounded-xl shadow-lg text-white font-bold text-lg bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 focus:outline-none focus:ring-4 focus:ring-purple-500/30 transition-all transform hover:-translate-y-1 ${saving ? 'opacity-70 cursor-not-allowed' : ''}`}
+            {/* Links adicionales */}
+            <div className="mt-6 grid grid-cols-1 gap-4">
+                <button 
+                    onClick={() => router.push('/test/report')}
+                    className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition group"
                 >
-                  {saving ? (
-                    <>
-                      <div className="animate-spin -ml-1 mr-3 h-5 w-5 text-white border-2 border-white border-t-transparent rounded-full"></div>
-                      Guardando...
-                    </>
-                  ) : (
-                    'Guardar Cambios'
-                  )}
+                    <div className="flex items-center gap-3">
+                        <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
+                            <Icon name="documento" size={20} />
+                        </div>
+                        <div className="text-left">
+                            <p className="font-bold text-gray-900 text-sm">Mi Reporte de IA</p>
+                            <p className="text-xs text-gray-500">Ver análisis de personalidad</p>
+                        </div>
+                    </div>
+                    <Icon name="flecha_derecha" size={18} className="text-gray-300 group-hover:text-purple-500 transition" />
                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
 
-        {/* Enlaces adicionales */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <a href="/test/report" className="flex items-center p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all group">
-                <div className="bg-purple-100 p-3 rounded-lg group-hover:bg-purple-200 transition-colors mr-4">
-                    <Icon name="documento" size={24} className="text-purple-600" />
-                </div>
-                <div>
-                    <h3 className="font-semibold text-gray-900">Reporte de Compatibilidad</h3>
-                    <p className="text-sm text-gray-500">Ver tu análisis detallado</p>
-                </div>
-                <Icon name="flecha_derecha" size={20} className="ml-auto text-gray-400 group-hover:text-purple-500 transition-colors" />
-            </a>
         </div>
-      </div>
     </div>
   )
 }
