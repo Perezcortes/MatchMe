@@ -6,17 +6,20 @@ import { createClient } from '@supabase/supabase-js'
 import Icon from '../components/Icon'
 import { Check, X, Loader2 } from 'lucide-react'
 
-// Cliente Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Constantes UI
 const objectiveMap = {
   amistad: { name: 'Amistad', color: 'text-blue-600 bg-blue-50 border-blue-200' },
   networking: { name: 'Networking', color: 'text-green-600 bg-green-50 border-green-200' },
   relacion: { name: 'Relación', color: 'text-pink-600 bg-pink-50 border-pink-200' }
+}
+
+const getInitials = (name: string) => {
+  if (!name) return '??'
+  return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
 }
 
 const Toast = ({ message, onClose }: { message: string, onClose: () => void }) => (
@@ -38,12 +41,12 @@ const Toast = ({ message, onClose }: { message: string, onClose: () => void }) =
 
 export default function MatchesPage() {
   const router = useRouter()
-  const [matches, setMatches] = useState<any[]>([]) // Usamos any para simplificar los mocks
+  const [matches, setMatches] = useState<any[]>([])
   const [report, setReport] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   
-  // --- GENERADOR DE DATOS FALSOS (La Magia) ---
+  // Datos estáticos (Mock Data)
   const generateFakeMatches = () => {
     return [
         {
@@ -61,7 +64,7 @@ export default function MatchesPage() {
             id: '2',
             name: 'Carlos Ruiz',
             age: 23,
-            city: 'Tamazulapan del Progreso, México',
+            city: 'Tamazulapan del Progreso',
             objective: 'networking',
             compatibilityScore: 88,
             interests: ['tecnologia', 'emprendimiento', 'fitness'],
@@ -83,7 +86,7 @@ export default function MatchesPage() {
             id: '4',
             name: 'Miguel Ángel',
             age: 22,
-            city: 'Asunción Nochixtlán, México',
+            city: 'Asunción Nochixtlán',
             objective: 'amistad',
             compatibilityScore: 78,
             interests: ['videojuegos', 'anime', 'cocina'],
@@ -105,7 +108,7 @@ export default function MatchesPage() {
             id: '6',
             name: 'Daniela P.',
             age: 19,
-            city: 'Santiago Juxtlahuaca, México',
+            city: 'Santiago Juxtlahuaca',
             objective: 'amistad',
             compatibilityScore: 70,
             interests: ['senderismo', 'naturaleza', 'animales'],
@@ -115,29 +118,25 @@ export default function MatchesPage() {
     ]
   }
 
+  const [stats, setStats] = useState({
+    total: 6,
+    highCompat: 6,
+    commonInterests: 85,
+    avgScore: 81
+  })
+
   useEffect(() => {
     const initPage = async () => {
       try {
         setLoading(true)
         
-        // 1. Verificar si hay usuario (Esto sí lo dejamos real para seguridad)
+        // 1. Intentamos autenticar (pero sin bloquear)
         const { data: { user } } = await supabase.auth.getUser()
         
-        // Si no hay usuario, intentamos recuperarlo del localStorage o redirigimos
-        // (Permisivo para móviles)
-        if (!user) {
-             // Intentamos ver si hay sesión reciente
-             const { data: { session } } = await supabase.auth.getSession()
-             if (!session) {
-                 // Si de plano no hay nada, al login
-                 router.push('/login')
-                 return
-             }
-        }
+        let aiReportText = "Tu análisis de personalidad está listo. Destacas por tu apertura a nuevas experiencias y tu enfoque en metas claras.";
 
-        // 2. Cargar TU Reporte Real (Esto sí viene de la DB)
-        let realReport = "Tu análisis de personalidad está listo.";
         if (user) {
+            // Si hay usuario, intentamos cargar SU reporte real
             const { data } = await supabase
                 .from('users')
                 .select('ai_report')
@@ -145,12 +144,15 @@ export default function MatchesPage() {
                 .maybeSingle()
             
             if (data?.ai_report) {
-                realReport = data.ai_report;
+                aiReportText = data.ai_report;
             }
+        } else {
+            console.log("Modo Demo: No se detectó usuario, mostrando datos estáticos")
+            // AQUÍ ESTÁ LA CLAVE: NO HACEMOS router.push('/login')
+            // Dejamos que siga corriendo para mostrar la interfaz
         }
-        setReport(realReport)
 
-        // 3. Cargar Matches Falsos (Esto siempre funciona)
+        setReport(aiReportText)
         setMatches(generateFakeMatches())
 
       } catch (err) {
@@ -192,7 +194,7 @@ export default function MatchesPage() {
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center px-4">
         <div className="text-center">
           <Loader2 className="animate-spin rounded-full h-16 w-16 text-purple-600 mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Cargando...</p>
+          <p className="text-gray-600 font-medium">Cargando tus mejores conexiones...</p>
         </div>
       </div>
     )
@@ -221,6 +223,26 @@ export default function MatchesPage() {
                     {renderCleanReport(report)}
                 </ul>
             </div>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
+          <div className="bg-white p-4 rounded-xl shadow text-center">
+            <div className="text-2xl font-bold text-purple-600">{stats.total}</div>
+            <div className="text-xs text-gray-500">Matches</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow text-center">
+            <div className="text-2xl font-bold text-green-600">{stats.highCompat}</div>
+            <div className="text-xs text-gray-500">Top %</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow text-center">
+            <div className="text-2xl font-bold text-blue-600">{stats.commonInterests}%</div>
+            <div className="text-xs text-gray-500">Intereses</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow text-center">
+            <div className="text-2xl font-bold text-orange-600">{stats.avgScore}%</div>
+            <div className="text-xs text-gray-500">Score</div>
           </div>
         </div>
 
