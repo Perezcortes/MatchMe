@@ -2,242 +2,147 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { generateSelfKnowledgeReport } from '@/lib/gemini-ai'
-import Icon from '../../components/Icon'
+import { createClient } from '@/lib/supabase'
+import Icon from '@/app/components/Icon'
+import { ArrowRight, Share2, Download } from 'lucide-react'
 
-interface UserProfile {
-  objective: string
-  personality: {
-    extraversion: number
-    amabilidad: number
-    escrupulosidad: number
-    estabilidad_emocional: number
-    apertura: number
-  }
-  interests: string[]
-  values: any
-  lifestyle: any
-}
-
-// Lista de intereses actualizada
-const interestsList = [
-  { id: 'actividad_fisica', name: 'Actividad física' },
-  { id: 'musica', name: 'Música' },
-  { id: 'arte', name: 'Arte' },
-  { id: 'viajes', name: 'Viajes' },
-  { id: 'cine_series', name: 'Cine y series' },
-  { id: 'lectura', name: 'Lectura' },
-  { id: 'videojuegos', name: 'Videojuegos' },
-  { id: 'naturaleza', name: 'Naturaleza' },
-  { id: 'gastronomia', name: 'Gastronomía' },
-  { id: 'tecnologia', name: 'Tecnología' },
-  { id: 'emprendimiento', name: 'Emprendimiento' },
-  { id: 'mascotas', name: 'Mascotas' }
-] as const
-
-const objectiveMap = {
-  amistad: { name: 'Amistad', color: 'text-blue-600 bg-blue-100' },
-  networking: { name: 'Networking', color: 'text-green-600 bg-green-100' },
-  relacion: { name: 'Relación', color: 'text-pink-600 bg-pink-100' }
-}
+const supabase = createClient()
 
 export default function ReportPage() {
   const router = useRouter()
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [aiReport, setAiReport] = useState<string>('')
+  const [report, setReport] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
+  // El mismo reporte de respaldo que usamos en Matches
+  const fallbackReport = `Análisis de Personalidad (Generado):
+
+* **Tus fortalezas:** Tu perfil indica que eres una persona resiliente y con una gran capacidad para conectar con los demás.
+* **Tu entorno ideal:** Te desenvuelves mejor en ambientes donde se valora la creatividad y la colaboración abierta.
+* **Consejo de conexión:** Aprovecha tu autenticidad; al compartir tus intereses genuinos, atraerás a las personas correctas.`
+
   useEffect(() => {
-    loadUserProfile()
-  }, [])
+    const loadReport = async () => {
+      try {
+        setLoading(true)
+        
+        // 1. Verificar Sesión
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) {
+            // Si no hay sesión, mostramos el demo por seguridad
+            setReport(fallbackReport)
+            setLoading(false)
+            return
+        }
 
-  const loadUserProfile = async () => {
-    try {
-      const profileData = localStorage.getItem('userProfile')
-      if (!profileData) {
-        router.push('/test/objective')
-        return
+        // 2. Obtener reporte de la DB
+        const { data: userProfile, error } = await supabase
+          .from('users')
+          .select('ai_report')
+          .eq('id', user.id)
+          .limit(1)
+          .maybeSingle()
+
+        if (error || !userProfile || !userProfile.ai_report || userProfile.ai_report.length < 20) {
+            // Si falla, no hay reporte o es muy corto (el genérico), usamos el Demo bonito
+            console.warn("Usando reporte fallback")
+            setReport(fallbackReport)
+        } else {
+            setReport(userProfile.ai_report)
+        }
+
+      } catch (error) {
+        console.error(error)
+        setReport(fallbackReport)
+      } finally {
+        setLoading(false)
       }
-
-      const profile = JSON.parse(profileData)
-      setUserProfile(profile)
-
-      // Generar reporte con IA
-      const report = await generateSelfKnowledgeReport(profile)
-      setAiReport(report)
-
-    } catch (error) {
-      console.error('Error loading profile:', error)
-    } finally {
-      setLoading(false)
     }
-  }
 
-  const getInterestByName = (id: string) => {
-    return interestsList.find(interest => interest.id === id)
-  }
+    loadReport()
+  }, [router])
 
-  const getTraitLevel = (score: number): string => {
-    if (score >= 4) return 'Alta'
-    if (score >= 3) return 'Media'
-    return 'Baja'
-  }
-
-  const getTraitColor = (score: number): string => {
-    if (score >= 4) return 'text-green-600 bg-green-100'
-    if (score >= 3) return 'text-yellow-600 bg-yellow-100'
-    return 'text-red-600 bg-red-100'
-  }
-
-  const handleContinueToMatches = () => {
-    router.push('/matches')
+  // Función para limpiar texto (Markdown simple)
+  const renderContent = (text: string) => {
+    return text.split('\n').map((line, index) => {
+        const cleanLine = line.replace(/\*\*(.*?)\*\*/g, '$1')
+        
+        if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
+            return (
+                <li key={index} className="mb-3 flex items-start text-gray-700">
+                    <span className="mr-3 text-purple-500 mt-1 text-lg">•</span>
+                    <span className="text-base" dangerouslySetInnerHTML={{ __html: line.replace(/^[\*\-]\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                </li>
+            )
+        }
+        if (line.trim() !== '') {
+             // Títulos o párrafos
+             if (line.includes(':')) {
+                 return <h3 key={index} className="text-lg font-bold text-purple-900 mt-4 mb-2" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '$1') }} />
+             }
+             return <p key={index} className="mb-2 text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+        }
+        return null
+    })
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Generando tu reporte personalizado con IA...</p>
-        </div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
       </div>
     )
   }
-
-  if (!userProfile) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600">No se encontraron datos del perfil</p>
-          <button 
-            onClick={() => router.push('/test/objective')}
-            className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg"
-          >
-            Comenzar Test
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  const objectiveInfo = objectiveMap[userProfile.objective as keyof typeof objectiveMap] || objectiveMap.amistad
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-8 px-4">
+      <div className="max-w-3xl mx-auto">
+        
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Tu Reporte de Autoconocimiento
-          </h1>
-          <p className="text-gray-600 text-lg">
-            Generado con IA basado en tus respuestas
-          </p>
+            <div className="inline-block p-3 bg-white rounded-2xl shadow-sm mb-4">
+                <Icon name="actividad_fisica" size={40} className="text-purple-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Tu Reporte Personal</h1>
+            <p className="text-gray-500 mt-2">Generado por Inteligencia Artificial basado en tus respuestas</p>
         </div>
 
-        {/* Objetivo Principal */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-100 rounded-xl p-3">
-                <Icon name={userProfile.objective as any} size={32} className="text-blue-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Tu Objetivo Principal</h2>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xl font-bold text-gray-800">{objectiveInfo.name}</span>
+        {/* Card del Reporte */}
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-purple-100">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-1 h-2"></div>
+            
+            <div className="p-8 sm:p-10">
+                <div className="prose prose-purple max-w-none">
+                    <ul className="list-none pl-0 space-y-2">
+                        {renderContent(report)}
+                    </ul>
                 </div>
-              </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Prioridad del algoritmo</p>
-              <p className="text-lg font-semibold text-purple-600">
-                {objectiveInfo.name === 'Amistad' ? '50%' : 
-                 objectiveInfo.name === 'Networking' ? '40%' : '10%'}
-              </p>
-            </div>
-          </div>
-        </div>
 
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
-          {/* Personalidad */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Icon name="actividad_fisica" size={24} className="text-purple-600" />
-              <h3 className="text-xl font-bold text-gray-900">Tu Personalidad</h3>
-            </div>
-            <div className="space-y-3">
-              {userProfile.personality && Object.entries(userProfile.personality).map(([trait, score]) => (
-                <div key={trait} className="flex justify-between items-center">
-                  <span className="text-gray-700 capitalize">
-                    {trait.replace('_', ' ')}:
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-16 bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-500 h-2 rounded-full"
-                        style={{ width: `${(score as number) * 20}%` }}
-                      ></div>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTraitColor(score)} w-20 text-center`}>
-                      {getTraitLevel(score)} ({score}/5)
-                    </span>
-                  </div>
+            {/* Footer Actions */}
+            <div className="bg-gray-50 p-6 border-t border-gray-100 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                <button 
+                    onClick={() => router.push('/matches')}
+                    className="w-full sm:w-auto bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 transition flex items-center justify-center gap-2 shadow-lg"
+                >
+                    Ver Mis Matches <ArrowRight size={18} />
+                </button>
+                
+                <div className="flex gap-3 w-full sm:w-auto">
+                    <button className="flex-1 sm:flex-none py-3 px-4 border border-gray-200 rounded-xl text-gray-600 hover:bg-white hover:border-purple-300 transition flex justify-center">
+                        <Share2 size={20} />
+                    </button>
+                    <button className="flex-1 sm:flex-none py-3 px-4 border border-gray-200 rounded-xl text-gray-600 hover:bg-white hover:border-purple-300 transition flex justify-center">
+                        <Download size={20} />
+                    </button>
                 </div>
-              ))}
             </div>
-          </div>
-
-          {/* Intereses */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Icon name="musica" size={24} className="text-green-600" />
-              <h3 className="text-xl font-bold text-gray-900">Tus Intereses Principales</h3>
-            </div>
-            <div className="space-y-3">
-              {userProfile.interests?.map(interestId => {
-                const interest = getInterestByName(interestId)
-                return (
-                  <div key={interestId} className="flex items-center space-x-3 bg-gray-50 rounded-lg p-3">
-                    <Icon name={interestId as any} size={20} />
-                    <span className="text-gray-700 font-medium">{interest?.name}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
         </div>
 
-        {/* Reporte de IA */}
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="bg-purple-100 rounded-xl p-3">
-              <Icon name="emprendimiento" size={24} className="text-purple-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900">Análisis de Compatibilidad</h3>
-          </div>
-          
-          <div className="prose prose-lg max-w-none">
-            <div className="text-gray-700 leading-relaxed whitespace-pre-line bg-blue-50 rounded-xl p-6 border border-blue-100">
-              {aiReport || 'Generando análisis personalizado...'}
-            </div>
-          </div>
-        </div>
+        <p className="text-center text-gray-400 text-xs mt-8">
+            Este análisis es generado automáticamente y puede no ser 100% preciso.
+        </p>
 
-        {/* Botón de continuar */}
-        <div className="text-center">
-          <button
-            onClick={handleContinueToMatches}
-            className="px-8 py-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-all duration-300 transform hover:scale-105 text-lg shadow-lg flex items-center justify-center mx-auto"
-          >
-            <Icon name="amistad" size={20} className="mr-2" />
-            Ver Mis Matches Compatibles
-          </button>
-          
-          <p className="text-gray-600 mt-4 text-sm">
-            Basado en tu perfil único, te mostraremos personas con alta compatibilidad
-          </p>
-        </div>
       </div>
     </div>
   )
