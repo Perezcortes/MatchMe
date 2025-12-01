@@ -7,11 +7,13 @@ import { UserProfile, MatchResult, findBestMatchesReal } from '@/lib/matching-al
 import Icon from '../components/Icon'
 import { Check, X, Loader2 } from 'lucide-react'
 
+// Cliente Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// Constantes UI
 const objectiveMap = {
   amistad: { name: 'Amistad', color: 'text-blue-600 bg-blue-50 border-blue-200' },
   networking: { name: 'Networking', color: 'text-green-600 bg-green-50 border-green-200' },
@@ -44,20 +46,16 @@ const Toast = ({ message, onClose }: { message: string, onClose: () => void }) =
 
 export default function MatchesPage() {
   const router = useRouter()
-  
-  // Estados de Datos
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [report, setReport] = useState<string>('')
-  const [realDataCount, setRealDataCount] = useState(0)
-  const [stats, setStats] = useState({ total: 0, highCompat: 0, commonInterests: 0, avgScore: 0 })
-  
-  // Estados de UI
-  const [isAuthChecking, setIsAuthChecking] = useState(true)
-  const [loadingData, setLoadingData] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [realDataCount, setRealDataCount] = useState(0)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  
+  const [stats, setStats] = useState({ total: 0, highCompat: 0, commonInterests: 0, avgScore: 0 })
 
-  // Adaptador
+  // Adaptador de datos
   const adaptServerMatches = (serverMatches: any[]): MatchResult[] => {
     return serverMatches.map(m => ({
       user: {
@@ -91,100 +89,62 @@ export default function MatchesPage() {
     }))
   }
 
-  // EFECTO 1: Manejo EXCLUSIVO de Autenticación (Blindado)
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    const checkSession = async () => {
-        try {
-            // 1. Verificar sesión actual
-            const { data: { session } } = await supabase.auth.getSession()
-            
-            if (!mounted) return;
-
-            if (session) {
-                setIsAuthChecking(false)
-                loadUserData(session.user.id)
-            } else {
-                setIsAuthChecking(true) 
-            }
-        } catch (e) {
-            console.error("Auth check error", e)
-            setIsAuthChecking(false)
-        }
-    }
-
-    checkSession()
-
-    // Escuchar cambios en tiempo real
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (!mounted) return;
-        
-        console.log("Auth Event:", event)
-
-        if (session) {
-            setIsAuthChecking(false)
-            loadUserData(session.user.id)
-        } else if (event === 'SIGNED_OUT') { // CORRECCIÓN: Quitamos USER_DELETED
-            router.push('/login')
-        } else {
-            setTimeout(() => {
-                if (mounted && !session) {
-                    setIsAuthChecking(false)
-                    router.push('/login')
-                }
-            }, 1000)
-        }
-    })
-
-    return () => {
-        mounted = false;
-        subscription.unsubscribe()
-    }
-  }, [router])
-
-
-  // EFECTO 2: Carga de Datos (Separado de Auth)
-  const loadUserData = async (userId: string) => {
+    const initPage = async () => {
       try {
-        setLoadingData(true)
+        setLoading(true)
+        
+        // 1. VERIFICACIÓN SIMPLE Y DIRECTA
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        
+        if (authError || !user) {
+          console.log("No user session found via getUser()")
+          if (isMounted) router.push('/login')
+          return
+        }
 
-        // A. Intentar Cache Local primero
+        // 2. ESTRATEGIA A: CACHÉ (Para velocidad)
         const storedResults = localStorage.getItem('matchme_results')
         if (storedResults) {
             try {
                 const parsed = JSON.parse(storedResults)
                 if (parsed.success && parsed.matches && parsed.matches.length > 0) {
-                    const loadedMatches = adaptServerMatches(parsed.matches)
-                    setMatches(loadedMatches)
-                    setReport(parsed.report || '')
-                    setRealDataCount(loadedMatches.length)
-                    calculateStats(loadedMatches)
-                    setLoadingData(false)
+                    if (isMounted) {
+                        const loadedMatches = adaptServerMatches(parsed.matches)
+                        setMatches(loadedMatches)
+                        setReport(parsed.report || '')
+                        setRealDataCount(loadedMatches.length)
+                        calculateStats(loadedMatches)
+                        setLoading(false)
+                    }
                     return 
                 }
             } catch (e) { console.warn("Cache inválido") }
         }
 
-        // B. Cargar de DB
+        // 3. ESTRATEGIA B: BASE DE DATOS (Si no hay caché)
         const { data: userProfiles, error: dbError } = await supabase
           .from('users')
           .select('*')
-          .eq('id', userId)
+          .eq('id', user.id)
           .limit(1)
 
         if (dbError) throw dbError
+        
+        // VALIDACIÓN RELAJADA (Evita expulsiones innecesarias)
         const userProfile = userProfiles && userProfiles.length > 0 ? userProfiles[0] : null
 
+        // Si no hay perfil, intentamos recuperarlo o mostrar error, PERO NO SACAMOS AL LOGIN
         if (!userProfile) {
-          setError("No encontramos tu usuario en la base de datos.")
-          setLoadingData(false)
-          return
+          throw new Error("Tu cuenta existe pero no encontramos tu perfil de datos.")
         }
 
+        // Rellenar datos para el algoritmo
         const currentUserProfile: UserProfile = {
-            id: userId,
-            user_id: userId,
+            id: user.id,
+            user_id: user.id,
             objective: userProfile.goal || 'amistad',
             big_five_scores: userProfile.big_five_scores || { extraversion: 3, amabilidad: 3, escrupulosidad: 3, estabilidad_emocional: 3, apertura: 3 },
             interests: userProfile.hobbies_list || [],
@@ -202,24 +162,34 @@ export default function MatchesPage() {
             user_data: { 
                 personal_data: { 
                     name: userProfile.name || "Yo", 
-                    email: "" 
+                    email: userProfile.email || "",
+                    age: userProfile.age || 20,
+                    city: userProfile.city || "" 
                 } 
             }
         }
 
         const bestMatches = await findBestMatchesReal(currentUserProfile, 12)
-        setMatches(bestMatches)
-        setReport(userProfile.ai_report || '')
-        setRealDataCount(bestMatches.length)
-        calculateStats(bestMatches)
+        
+        if (isMounted) {
+            setMatches(bestMatches)
+            setReport(userProfile.ai_report || '')
+            setRealDataCount(bestMatches.length)
+            calculateStats(bestMatches)
+        }
 
       } catch (err: any) {
-        console.error('Error data:', err)
-        setError(err.message)
+        console.error('Error loading matches:', err)
+        if (isMounted) setError(err.message)
       } finally {
-        setLoadingData(false)
+        if (isMounted) setLoading(false)
       }
-  }
+    }
+
+    initPage()
+
+    return () => { isMounted = false }
+  }, [router])
 
   const calculateStats = (matchesData: any[]) => {
     if (!matchesData.length) return
@@ -256,14 +226,12 @@ export default function MatchesPage() {
     })
   }
 
-  if (isAuthChecking || loadingData) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center px-4">
         <div className="text-center">
           <Loader2 className="animate-spin rounded-full h-16 w-16 text-purple-600 mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">
-            {isAuthChecking ? 'Verificando sesión...' : 'Buscando tus mejores conexiones...'}
-          </p>
+          <p className="text-gray-600 font-medium">Cargando tus mejores conexiones...</p>
         </div>
       </div>
     )
@@ -279,7 +247,7 @@ export default function MatchesPage() {
                 onClick={() => router.push('/test/objective')}
                 className="w-full bg-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-purple-700 transition"
             >
-                Ir al Test
+                Revisar mi Test
             </button>
         </div>
       </div>
@@ -290,7 +258,6 @@ export default function MatchesPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-8 px-4">
       <div className="max-w-6xl mx-auto">
         
-        {/* Header & Reporte */}
         <div className="mb-12">
           <div className="text-center mb-8">
              <h1 className="text-3xl font-bold text-gray-900 mb-2">Tus Resultados</h1>
@@ -314,7 +281,6 @@ export default function MatchesPage() {
           )}
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
           <div className="bg-white p-4 rounded-xl shadow text-center">
             <div className="text-2xl font-bold text-purple-600">{stats.total}</div>
@@ -334,7 +300,6 @@ export default function MatchesPage() {
           </div>
         </div>
 
-        {/* Grid de Matches */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {matches.map((match, i) => {
             const userData = match.user?.user_data?.personal_data || {}
