@@ -1,11 +1,15 @@
-// app/actions.ts
 "use server";
 
 import { generateText, embed } from "ai";
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from '@ai-sdk/google'; // Cambio en la importación para configurar
 import { createClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { createServerClientWrapper } from "@/lib/supabase-server";
+
+// Configurar Google AI explícitamente
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_GENERATIVE_AI_API_KEY,
+});
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,7 +48,7 @@ export async function generatePersonalityReport(formData: FormData) {
     `;
 
     const { text: report } = await generateText({
-      model: google("gemini-2.5-flash"),
+      model: google("gemini-1.5-flash"), // Usamos 1.5-flash que es rápido y estable
       prompt,
     });
 
@@ -66,12 +70,10 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       Personalidad Big Five: ${JSON.stringify(fullProfile.bigFive)}.
       Intereses: ${fullProfile.hobbies.join(", ")}.
       Valores: ${fullProfile.values.main}, futuro: ${fullProfile.values.future}.
-      Estilo de vida: ${fullProfile.lifestyle.social}, ${
-      fullProfile.lifestyle.alcohol
-    }.
+      Estilo de vida: ${fullProfile.lifestyle.social}, ${fullProfile.lifestyle.alcohol}.
     `;
 
-    // 2. Generar embedding
+    // 2. Generar embedding (CRÍTICO PARA MATCHES)
     let embedding: number[] = [];
     try {
       const { embedding: generatedEmbedding } = await embed({
@@ -80,8 +82,8 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       });
       embedding = generatedEmbedding;
     } catch (err) {
-      console.warn("Error generando embedding:", err);
-      // Continuar sin embedding (fallback)
+      console.error("Error generando embedding (Revisa tu API Key):", err);
+      // Si falla el embedding, no podremos hacer matches inteligentes, pero guardamos el perfil
     }
 
     // 3. Generar reporte de IA
@@ -104,7 +106,7 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       aiReport = report;
     } catch (err) {
       console.warn("Error generando reporte:", err);
-      aiReport = "Reporte no disponible en este momento";
+      aiReport = "Tu perfil está listo. ¡Explora tus matches!";
     }
 
     // 4. Actualizar usuario con embedding y reporte
@@ -122,16 +124,17 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
           goal: fullProfile.goal,
           ai_report: aiReport,
           embedding: embedding.length > 0 ? embedding : null,
+          test_completed: true,
           updated_at: new Date().toISOString(),
         })
         .eq("id", fullProfile.userId);
 
       if (updateError) {
-        console.warn("Error updating user:", updateError);
+        throw new Error("Error guardando en DB: " + updateError.message);
       }
     }
 
-    // 5. Buscar matches (si el embedding se generó correctamente)
+    // 5. Buscar matches
     let matches = [];
     if (embedding.length > 0) {
       try {
@@ -139,7 +142,7 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
           "match_users",
           {
             query_embedding: embedding,
-            match_threshold: 0.1,
+            match_threshold: 0.1, // Umbral bajo para asegurar resultados
             match_count: 5,
           }
         );
@@ -160,7 +163,7 @@ export async function saveProfileAndGetMatches(fullProfile: any) {
       matches: matches,
     };
   } catch (error: any) {
-    console.error("Error en saveProfileAndGetMatches:", error);
+    console.error("Error crítico en saveProfileAndGetMatches:", error);
     return {
       success: false,
       error: error.message || "Error al procesar el perfil",

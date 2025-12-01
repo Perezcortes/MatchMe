@@ -1,3 +1,4 @@
+// lib\matching-algorithm.ts
 // Algoritmo de compatibilidad mejorado
 // Interfaz auxiliar para los datos personales
 interface PersonalData {
