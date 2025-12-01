@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { UserProfile, MatchResult, findBestMatchesReal } from '@/lib/matching-algorithm'
 import Icon from '../components/Icon'
-import { Check, X } from 'lucide-react'
+import { Check, X, Loader2 } from 'lucide-react'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,16 +24,18 @@ const getInitials = (name: string) => {
   return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
 }
 
-// --- COMPONENTE TOAST (Notificación Flotante) ---
+// Componente Toast
 const Toast = ({ message, onClose }: { message: string, onClose: () => void }) => (
-    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
-        <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700">
-            <div className="bg-green-500 rounded-full p-1">
-                <Check size={16} className="text-white" />
-            </div>
-            <div>
-                <h4 className="font-bold text-sm">¡Solicitud Enviada!</h4>
-                <p className="text-xs text-gray-300">{message}</p>
+    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 px-4 w-full sm:w-auto">
+        <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700 w-full sm:w-auto justify-between sm:justify-start">
+            <div className="flex items-center gap-4">
+                <div className="bg-green-500 rounded-full p-1">
+                    <Check size={16} className="text-white" />
+                </div>
+                <div>
+                    <h4 className="font-bold text-sm">¡Solicitud Enviada!</h4>
+                    <p className="text-xs text-gray-300">{message}</p>
+                </div>
             </div>
             <button onClick={onClose} className="ml-4 text-gray-500 hover:text-white">
                 <X size={18} />
@@ -51,7 +53,6 @@ export default function MatchesPage() {
   const [realDataCount, setRealDataCount] = useState(0)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   
-  // Estado para estadísticas
   const [stats, setStats] = useState({
     total: 0,
     highCompat: 0,
@@ -59,7 +60,7 @@ export default function MatchesPage() {
     avgScore: 0
   })
 
-  // Función adaptadora para datos del servidor (si vienen del caché)
+  // Adaptador para datos del caché
   const adaptServerMatches = (serverMatches: any[]): MatchResult[] => {
     return serverMatches.map(m => ({
       user: {
@@ -94,27 +95,15 @@ export default function MatchesPage() {
   }
 
   useEffect(() => {
-    const initPage = async () => {
+    // Esta función maneja la carga de datos segura
+    const loadData = async (userId: string) => {
       try {
-        setLoading(true)
-        
-        // 1. Verificar Sesión
-        const { data: { session }, error: authError } = await supabase.auth.getSession()
-        const user = session?.user
-        
-        if (authError || !user) {
-          router.push('/login')
-          return
-        }
-
-        // 2. ESTRATEGIA A: Leer caché local (Rápido)
+        // 1. Cache (Rápido)
         const storedResults = localStorage.getItem('matchme_results')
-        
         if (storedResults) {
             try {
                 const parsed = JSON.parse(storedResults)
                 if (parsed.success && parsed.matches && parsed.matches.length > 0) {
-                    console.log("Usando matches del servidor (Caché)")
                     const loadedMatches = adaptServerMatches(parsed.matches)
                     setMatches(loadedMatches)
                     setReport(parsed.report || '')
@@ -126,29 +115,26 @@ export default function MatchesPage() {
             } catch (e) { console.warn("Cache inválido") }
         }
 
-        // 3. ESTRATEGIA B: Base de Datos (Fallback Seguro)
-        // Usamos .limit(1) para evitar error 406
+        // 2. DB (Seguro)
         const { data: userProfiles, error: dbError } = await supabase
           .from('users')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', userId)
           .limit(1)
 
         if (dbError) throw dbError
-
         const userProfile = userProfiles && userProfiles.length > 0 ? userProfiles[0] : null
 
-        // VALIDACIÓN RELAJADA: Si existe el perfil, lo aceptamos aunque falten datos
         if (!userProfile) {
           setError("No encontramos tu usuario en la base de datos.")
           setLoading(false)
           return
         }
 
-        // Rellenamos datos faltantes con valores por defecto para que NO falle
+        // Rellenamos datos por defecto
         const currentUserProfile: UserProfile = {
-            id: user.id,
-            user_id: user.id,
+            id: userId,
+            user_id: userId,
             objective: userProfile.goal || 'amistad',
             big_five_scores: userProfile.big_five_scores || { extraversion: 3, amabilidad: 3, escrupulosidad: 3, estabilidad_emocional: 3, apertura: 3 },
             interests: userProfile.hobbies_list || [],
@@ -173,7 +159,6 @@ export default function MatchesPage() {
             }
         }
 
-        // Calcular matches
         const bestMatches = await findBestMatchesReal(currentUserProfile, 12)
         setMatches(bestMatches)
         setReport(userProfile.ai_report || '')
@@ -188,7 +173,41 @@ export default function MatchesPage() {
       }
     }
 
-    initPage()
+    // --- LÓGICA DE SESIÓN ROBUSTA PARA MÓVIL ---
+    const checkSession = async () => {
+        // 1. Intentar obtener sesión local (Más rápido que getUser)
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session?.user) {
+            // Si hay sesión, cargamos datos
+            loadData(session.user.id)
+        } else {
+            // Si no hay sesión inmediata, esperamos un poco antes de expulsar
+            // Esto da tiempo en móviles lentos a que la cookie se lea
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                loadData(user.id)
+            } else {
+                // Solo redirigimos si definitivamente no hay usuario
+                router.push('/login')
+            }
+        }
+    }
+
+    // Suscribirse a cambios de auth (Crucial para móviles)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+            loadData(session.user.id)
+        } else if (event === 'SIGNED_OUT') {
+            router.push('/login')
+        }
+    })
+
+    checkSession()
+
+    return () => {
+        authListener.subscription.unsubscribe()
+    }
   }, [router])
 
   const calculateStats = (matchesData: any[]) => {
@@ -207,15 +226,12 @@ export default function MatchesPage() {
     setTimeout(() => setToastMsg(null), 3000)
   }
 
-  // Función para limpiar texto IA (quita asteriscos)
   const renderCleanReport = (text: string) => {
     if (!text) return null
     return text.split('\n').map((line, index) => {
-        // Limpia **negritas** y * listas
         const cleanLine = line.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1')
         
         if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
-            // Formato de lista
             return (
                 <li key={index} className="mb-2 flex items-start text-gray-700">
                     <span className="mr-2 text-purple-500 mt-1">•</span>
@@ -224,7 +240,6 @@ export default function MatchesPage() {
             )
         }
         if (line.trim() !== '') {
-             // Párrafo normal
              return <p key={index} className="mb-2 text-gray-700" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
         }
         return null
@@ -235,8 +250,8 @@ export default function MatchesPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center px-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Buscando conexiones...</p>
+          <Loader2 className="animate-spin rounded-full h-16 w-16 text-purple-600 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">Sincronizando con tu dispositivo...</p>
         </div>
       </div>
     )
@@ -246,7 +261,7 @@ export default function MatchesPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Falta un paso</h2>
             <p className="text-gray-600 mb-6">{error}</p>
             <button 
                 onClick={() => router.push('/test/objective')}
@@ -387,7 +402,6 @@ export default function MatchesPage() {
             </div>
         )}
 
-        {/* Toast Notification */}
         {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
 
       </div>
